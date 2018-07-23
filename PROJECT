@@ -1,0 +1,3 @@
+version: "1"
+domain: external-loadbalancer
+repo: github.com/k8s-external-lb/external-loadbalancer-controller
