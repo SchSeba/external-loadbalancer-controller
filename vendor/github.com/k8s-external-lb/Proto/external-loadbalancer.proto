@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package grpc;
+
+service ExternalLoadBalancer {
+
+    rpc Create(Data) returns (Result) {}
+    rpc Update(Data) returns (Result) {}
+    rpc Delete(Data) returns (Result) {}
+    rpc NodesChange(Nodes) returns (Result) {}
+
+}
+
+message Data {
+    string FarmName = 1;
+    repeated Port Ports = 2;
+    repeated string nodes = 3;
+}
+
+message Port {
+    string Name = 1;
+    int32 Port = 2;
+    int32 NodePort = 3;
+    string Protocol = 4;
+}
+
+message Result {
+    string FarmAddress = 1;
+}
+
+message Nodes {
+    repeated string list = 1;
+}

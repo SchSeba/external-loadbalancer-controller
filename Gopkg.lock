@@ -8,6 +8,12 @@
   version = "v0.21.0"
 
 [[projects]]
+  name = "github.com/cloudflare/cfssl"
+  packages = ["log"]
+  revision = "5d63dbd981b5c408effbb58c442d54761ff94fbd"
+  version = "1.3.2"
+
+[[projects]]
   name = "github.com/davecgh/go-spew"
   packages = ["spew"]
   revision = "346938d642f2ec3594ed81d874461961cd0faa76"
@@ -143,6 +149,12 @@
   version = "1.1.4"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/k8s-external-lb/Proto"
+  packages = ["."]
+  revision = "f0ceef26862261c750823995a107b98878d8e11b"
+
+[[projects]]
   name = "github.com/markbates/inflect"
   packages = ["."]
   revision = "dd7de90c06bca70f18136e59dec2270c19a401e7"
@@ -266,7 +278,9 @@
     "http2",
     "http2/hpack",
     "idna",
-    "lex/httplex"
+    "internal/timeseries",
+    "lex/httplex",
+    "trace"
   ]
   revision = "640f4622ab692b87c2f3a94265e6f579fe38263d"
 
@@ -352,6 +366,44 @@
   ]
   revision = "b1f26356af11148e710935ed1ac8a7f5702c7612"
   version = "v1.1.0"
+
+[[projects]]
+  branch = "master"
+  name = "google.golang.org/genproto"
+  packages = ["googleapis/rpc/status"]
+  revision = "2a72893556e4d1f6c795a4c039314c9fa751eedb"
+
+[[projects]]
+  name = "google.golang.org/grpc"
+  packages = [
+    ".",
+    "balancer",
+    "balancer/base",
+    "balancer/roundrobin",
+    "codes",
+    "connectivity",
+    "credentials",
+    "encoding",
+    "encoding/proto",
+    "grpclog",
+    "internal",
+    "internal/backoff",
+    "internal/channelz",
+    "internal/grpcrand",
+    "keepalive",
+    "metadata",
+    "naming",
+    "peer",
+    "resolver",
+    "resolver/dns",
+    "resolver/passthrough",
+    "stats",
+    "status",
+    "tap",
+    "transport"
+  ]
+  revision = "168a6198bcb0ef175f7dacec0b8691fc141dc9b8"
+  version = "v1.13.0"
 
 [[projects]]
   name = "gopkg.in/fsnotify.v1"
@@ -572,6 +624,7 @@
     "pkg/client/apiutil",
     "pkg/client/config",
     "pkg/controller",
+    "pkg/controller/controllerutil",
     "pkg/event",
     "pkg/handler",
     "pkg/internal/controller",
@@ -582,6 +635,7 @@
     "pkg/recorder",
     "pkg/runtime/inject",
     "pkg/runtime/log",
+    "pkg/runtime/scheme",
     "pkg/runtime/signals",
     "pkg/source",
     "pkg/source/internal"
@@ -613,6 +667,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "bfdfdcd42937389241e9c76decc23658d29e0916f3e9fa2c6e4fac3bbd648ff5"
+  inputs-digest = "78c50934865c693c17df8924c97c6373d7779621718f30180a8499021d58831a"
   solver-name = "gps-cdcl"
   solver-version = 1

@@ -17,6 +17,9 @@ limitations under the License.
 package controller
 
 import (
+	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/farm"
+	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/node"
+	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/provider"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
@@ -25,10 +28,17 @@ var AddToManagerFuncs []func(manager.Manager) error
 
 // AddToManager adds all Controllers to the Manager
 func AddToManager(m manager.Manager) error {
-	for _, f := range AddToManagerFuncs {
-		if err := f(m); err != nil {
-			return err
-		}
+
+	farm.Add(m)
+
+	providerController, err := provider.NewProviderController(m)
+	if err != nil {
+		return err
 	}
+
+	node.NewNodeController(m, providerController)
+
+	//service.Add(m, providerController)
+
 	return nil
 }

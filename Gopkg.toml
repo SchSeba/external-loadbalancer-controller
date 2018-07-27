@@ -234,3 +234,11 @@ revision="f53464b8b84b4507805a0b033a8377b225163fea"
 name = "gopkg.in/fsnotify.v1"
 source = "https://github.com/fsnotify/fsnotify.git"
 version="v1.4.7"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/k8s-external-lb/Proto"
+
+[[constraint]]
+  name = "github.com/cloudflare/cfssl"
+  version = "1.3.2"

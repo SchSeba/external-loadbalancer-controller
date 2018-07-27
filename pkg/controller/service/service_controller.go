@@ -19,10 +19,12 @@ package service
 import (
 	"context"
 
-	managerv1 "github.com/k8s-external-lb/external-loadbalancer-controller/pkg/apis/manager/v1"
-	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+
+	"github.com/cloudflare/cfssl/log"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -45,7 +47,7 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileService{Client: mgr.GetClient(), scheme: mgr.GetScheme()}
+	return &ReconcileService{Client: mgr.GetClient(), scheme: mgr.GetScheme(), event: mgr.GetRecorder("External-LB")}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -57,17 +59,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to Service
-	err = c.Watch(&source.Kind{Type: &managerv1.Service{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return err
-	}
-
-	// TODO(user): Modify this to be the types you create
-	// Uncomment watch a Deployment created by Service - change this for objects you create
-	err = c.Watch(&source.Kind{Type: &appsv1.Deployment{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType:    &managerv1.Service{},
-	})
+	err = c.Watch(&source.Kind{Type: &corev1.Service{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
@@ -81,16 +73,17 @@ var _ reconcile.Reconciler = &ReconcileService{}
 type ReconcileService struct {
 	client.Client
 	scheme *runtime.Scheme
+	event  record.EventRecorder
 }
 
 // Reconcile reads that state of the cluster for a Service object and makes changes based on the state read
 // and what is in the Service.Spec
 // TODO(user): Modify this Reconcile function to implement your Controller logic.  The scaffolding writes
 // a Deployment as an example
-// +kubebuilder:rbac:groups=manager.external-loadbalancer,resources=services,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;update;patch
 func (r *ReconcileService) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	// Fetch the Service instance
-	instance := &managerv1.Service{}
+	instance := &corev1.Service{}
 	err := r.Get(context.TODO(), request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -102,5 +95,6 @@ func (r *ReconcileService) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, err
 	}
 
+	log.Infof("%+v", instance)
 	return reconcile.Result{}, nil
 }

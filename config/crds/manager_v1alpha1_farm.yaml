@@ -21,8 +21,33 @@ spec:
         metadata:
           type: object
         spec:
+          properties:
+            provider:
+              type: string
+          required:
+          - provider
           type: object
         status:
+          properties:
+            connectionStatus:
+              type: string
+            ipAdress:
+              type: string
+            lastUpdate:
+              format: date-time
+              type: string
+            nodeList:
+              items:
+                type: string
+              type: array
+            serviceVersion:
+              type: string
+          required:
+          - ipAdress
+          - nodeList
+          - serviceVersion
+          - connectionStatus
+          - lastUpdate
           type: object
       type: object
   version: v1alpha1

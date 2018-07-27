@@ -19,8 +19,7 @@ package node
 import (
 	"context"
 
-	managerv1 "github.com/k8s-external-lb/external-loadbalancer-controller/pkg/apis/manager/v1"
-	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -29,50 +28,61 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	managerv1alpha1 "github.com/k8s-external-lb/external-loadbalancer-controller/pkg/apis/manager/v1alpha1"
+	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/provider"
+
+	"github.com/cloudflare/cfssl/log"
+	"k8s.io/client-go/tools/record"
 )
 
-/**
-* USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
-* business logic.  Delete these comments after modifying this file.*
- */
+type NodeController struct {
+	Controller    controller.Controller
+	ReconcileNode reconcile.Reconciler
+}
 
-// Add creates a new Node Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
-// and Start it when the Manager is Started.
-// USER ACTION REQUIRED: update cmd/manager/main.go to call this manager.Add(mgr) to install this Controller
-func Add(mgr manager.Manager) error {
-	return add(mgr, newReconciler(mgr))
+func NewNodeController(mgr manager.Manager, providerController *provider.ProviderController) (*NodeController, error) {
+	reconcileNode := newReconciler(mgr, providerController)
+	err := reconcileNode.updateProviderNodeList()
+	if err != nil {
+		return nil, err
+	}
+
+	controllerInstance, err := newController(mgr, reconcileNode)
+	if err != nil {
+		return nil, err
+	}
+	nodeController := &NodeController{Controller: controllerInstance,
+		ReconcileNode: reconcileNode}
+
+	return nodeController, nil
+
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileNode{Client: mgr.GetClient(), scheme: mgr.GetScheme()}
+func newReconciler(mgr manager.Manager, ProviderController *provider.ProviderController) *ReconcileNode {
+	return &ReconcileNode{Client: mgr.GetClient(),
+		scheme:             mgr.GetScheme(),
+		Event:              mgr.GetRecorder(managerv1alpha1.EventRecorderName),
+		ProviderController: ProviderController,
+		NodeMap:            make(map[string]string)}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
+func newController(mgr manager.Manager, r reconcile.Reconciler) (controller.Controller, error) {
 	// Create a new controller
 	c, err := controller.New("node-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Watch for changes to Node
-	err = c.Watch(&source.Kind{Type: &managerv1.Node{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &corev1.Node{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	// TODO(user): Modify this to be the types you create
-	// Uncomment watch a Deployment created by Node - change this for objects you create
-	err = c.Watch(&source.Kind{Type: &appsv1.Deployment{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType:    &managerv1.Node{},
-	})
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return c, nil
 }
 
 var _ reconcile.Reconciler = &ReconcileNode{}
@@ -80,25 +90,56 @@ var _ reconcile.Reconciler = &ReconcileNode{}
 // ReconcileNode reconciles a Node object
 type ReconcileNode struct {
 	client.Client
-	scheme *runtime.Scheme
+	Event              record.EventRecorder
+	ProviderController *provider.ProviderController
+	scheme             *runtime.Scheme
+	NodeMap            map[string]string
 }
+
+func (r *ReconcileNode) updateProviderNodeList() error {
+	needToUpdate := false
+	nodeList := make([]string, 0)
+
+	nodes := &corev1.NodeList{}
+	err := r.Client.List(context.TODO(), &client.ListOptions{}, nodes)
+	if err != nil {
+		return err
+	}
+
+	for _, node := range nodes.Items {
+		for _, IpAddr := range node.Status.Addresses {
+			if IpAddr.Type == "InternalIP" {
+				if value, ok := r.NodeMap[node.Name]; !ok || value != IpAddr.Address {
+					needToUpdate = true
+					r.NodeMap[node.Name] = IpAddr.Address
+					nodeList = append(nodeList, IpAddr.Address)
+				}
+			}
+		}
+	}
+
+	err = nil
+	if needToUpdate {
+		r.ProviderController.UpdateNodes(nodeList)
+	}
+
+	return err
+}
+
+// TODO: work on this shit
 
 // Reconcile reads that state of the cluster for a Node object and makes changes based on the state read
 // and what is in the Node.Spec
 // TODO(user): Modify this Reconcile function to implement your Controller logic.  The scaffolding writes
 // a Deployment as an example
-// +kubebuilder:rbac:groups=manager.external-loadbalancer,resources=nodes,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=nodes,verbs=get;list;watch;
 func (r *ReconcileNode) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	// Fetch the Node instance
-	instance := &managerv1.Node{}
+	instance := &corev1.Node{}
 	err := r.Get(context.TODO(), request.NamespacedName, instance)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// Object not found, return.  Created objects are automatically garbage collected.
-			// For additional cleanup logic use finalizers.
-			return reconcile.Result{}, nil
-		}
-		// Error reading the object - requeue the request.
+	if err != nil && !errors.IsNotFound(err) {
+		log.Error("Fail to reconcile node error message: ", err)
+
 		return reconcile.Result{}, err
 	}
 

@@ -24,15 +24,18 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // ProviderSpec defines the desired state of Provider
+// +k8s:openapi-gen=true
 type ProviderSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	Url     string `json:"url"`
+	Default bool   `json:"default,omitempty"`
 }
 
 // ProviderStatus defines the observed state of Provider
+// +k8s:openapi-gen=true
 type ProviderStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	ConnectionStatus string      `json:"connectionStatus"`
+	LastUpdate       metav1.Time `json:"lastUpdate"`
+	Farms            FarmList
 }
 
 // +genclient
@@ -44,7 +47,7 @@ type Provider struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ProviderSpec   `json:"spec,omitempty"`
+	Spec   ProviderSpec   `json:"spec"`
 	Status ProviderStatus `json:"status,omitempty"`
 }
 

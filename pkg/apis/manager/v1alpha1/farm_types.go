@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -25,14 +26,17 @@ import (
 
 // FarmSpec defines the desired state of Farm
 type FarmSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	Provider string `json:"provider"`
+	Ports    []corev1.ServicePort
 }
 
 // FarmStatus defines the observed state of Farm
 type FarmStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	IpAdress         string      `json:"ipAdress"`
+	NodeList         []string    `json:"nodeList"`
+	ServiceVersion   string      `json:"serviceVersion"`
+	ConnectionStatus string      `json:"connectionStatus"`
+	LastUpdate       metav1.Time `json:"lastUpdate"`
 }
 
 // +genclient

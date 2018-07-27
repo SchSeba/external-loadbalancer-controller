@@ -21,9 +21,27 @@ spec:
         metadata:
           type: object
         spec:
+          properties:
+            default:
+              type: boolean
+            url:
+              type: string
+          required:
+          - url
           type: object
         status:
+          properties:
+            connectionStatus:
+              type: string
+            lastUpdate:
+              format: date-time
+              type: string
+          required:
+          - connectionStatus
+          - lastUpdate
           type: object
+      required:
+      - spec
       type: object
   version: v1alpha1
 status:
