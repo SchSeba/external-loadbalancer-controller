@@ -20,6 +20,7 @@ import (
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/farm"
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/node"
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/provider"
+	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/service"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
@@ -29,16 +30,25 @@ var AddToManagerFuncs []func(manager.Manager) error
 // AddToManager adds all Controllers to the Manager
 func AddToManager(m manager.Manager) error {
 
-	farm.Add(m)
+	farmController, err := farm.NewFarmController(m)
+	if err != nil {
+		return err
+	}
 
 	providerController, err := provider.NewProviderController(m)
 	if err != nil {
 		return err
 	}
 
-	node.NewNodeController(m, providerController)
+	_, err = node.NewNodeController(m, providerController)
+	if err != nil {
+		return err
+	}
 
-	//service.Add(m, providerController)
+	_, err = service.NewServiceController(m, providerController, farmController)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }

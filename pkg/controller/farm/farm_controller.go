@@ -18,88 +18,171 @@ package farm
 
 import (
 	"context"
-	"log"
-	"reflect"
+	"fmt"
+
+	"github.com/cloudflare/cfssl/log"
 
 	managerv1alpha1 "github.com/k8s-external-lb/external-loadbalancer-controller/pkg/apis/manager/v1alpha1"
-	appsv1 "k8s.io/api/apps/v1"
+
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-/**
-* USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
-* business logic.  Delete these comments after modifying this file.*
- */
-
-// Add creates a new Farm Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
-// and Start it when the Manager is Started.
-// USER ACTION REQUIRED: update cmd/manager/main.go to call this manager.Add(mgr) to install this Controller
-func Add(mgr manager.Manager) error {
-	return add(mgr, newReconciler(mgr))
+type FarmController struct {
+	Client        client.Client
+	Controller    controller.Controller
+	ReconcileFarm reconcile.Reconciler
 }
 
-// newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileFarm{Client: mgr.GetClient(), scheme: mgr.GetScheme()}
+func NewFarmController(mgr manager.Manager) (*FarmController, error) {
+	reconcileFarm := newReconciler(mgr)
+	controllerInstance, err := newController(mgr, reconcileFarm)
+	if err != nil {
+		return nil, err
+	}
+
+	farmController := &FarmController{Client: mgr.GetClient(), Controller: controllerInstance, ReconcileFarm: reconcileFarm}
+	return farmController, nil
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
+func newController(mgr manager.Manager, r reconcile.Reconciler) (controller.Controller, error) {
 	// Create a new controller
 	c, err := controller.New("farm-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	// Watch for changes to Farm
+	// Watch for changes to Node
 	err = c.Watch(&source.Kind{Type: &managerv1alpha1.Farm{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	// TODO(user): Modify this to be the types you create
-	// Uncomment watch a Deployment created by Farm - change this for objects you create
-	err = c.Watch(&source.Kind{Type: &appsv1.Deployment{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType:    &managerv1alpha1.Farm{},
-	})
+	return c, nil
+}
+
+// newReconciler returns a new reconcile.Reconciler
+func newReconciler(mgr manager.Manager) *ReconcileFarm {
+	return &ReconcileFarm{Client: mgr.GetClient(),
+		scheme: mgr.GetScheme(),
+		Event:  mgr.GetRecorder(managerv1alpha1.EventRecorderName)}
+}
+
+func (f *FarmController) GetOrCreateFarm(service *corev1.Service) (*managerv1alpha1.Farm, bool, error) {
+	farmName := fmt.Sprintf("%s-%s", service.Namespace, service.Name)
+	farm := &managerv1alpha1.Farm{}
+	isCreated := false
+
+	err := f.Client.Get(context.TODO(), client.ObjectKey{Namespace: managerv1alpha1.ControllerNamespace, Name: farmName}, farm)
 	if err != nil {
-		return err
+		if !errors.IsNotFound(err) {
+			return nil, false, err
+		}
+		farm, err = f.createFarm(farmName, service)
+		if err != nil {
+			return nil, false, err
+		}
+
+		isCreated = true
 	}
 
-	return nil
+	return farm, isCreated, nil
+}
+
+func (f *FarmController) NeedToUpdate(farm *managerv1alpha1.Farm, service *corev1.Service) bool {
+	if farm.Status.ServiceVersion == service.ResourceVersion {
+		return false
+	}
+
+	// TODO: Update the farm data
+	return true
+}
+
+func (f *FarmController) getProvider(service *corev1.Service) (*managerv1alpha1.Provider, error) {
+	var provider managerv1alpha1.Provider
+
+	var err error
+
+	if value, ok := service.ObjectMeta.Annotations[managerv1alpha1.ExternalLoadbalancerAnnotationKey]; ok {
+		err = f.Client.Get(context.TODO(), client.ObjectKey{Name: value, Namespace: managerv1alpha1.ControllerNamespace}, &provider)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return nil, fmt.Errorf("Provider Not found for service : %s", service.Name)
+			}
+			return nil, err
+		}
+
+	} else {
+		var providerList managerv1alpha1.ProviderList
+		labelSelector := labels.Set{}
+		labelSelector[managerv1alpha1.ExternalLoadbalancerDefaultLabel] = "Default"
+		err = f.Client.List(context.TODO(), &client.ListOptions{LabelSelector: labelSelector.AsSelector()}, &providerList)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(providerList.Items) == 0 {
+			return nil, fmt.Errorf("Default provider not found")
+		} else if len(providerList.Items) > 1 {
+			return nil, fmt.Errorf("More then one default provider found")
+		}
+
+		provider = providerList.Items[0]
+	}
+
+	return &provider, nil
+}
+
+func (f *FarmController) createFarm(farmName string, service *corev1.Service) (*managerv1alpha1.Farm, error) {
+	provider, err := f.getProvider(service)
+	if err != nil {
+		return nil, err
+	}
+
+	farm := managerv1alpha1.Farm{ObjectMeta: metav1.ObjectMeta{Name: farmName,
+		Namespace: managerv1alpha1.ControllerNamespace},
+		Spec: managerv1alpha1.FarmSpec{Ports: service.Spec.Ports,
+			Provider: provider.Name},
+		Status: managerv1alpha1.FarmStatus{ServiceVersion: service.ResourceVersion}}
+
+	err = f.Client.Create(context.TODO(), &farm)
+	if err != nil {
+		return nil, err
+	}
+
+	return &farm, nil
 }
 
 var _ reconcile.Reconciler = &ReconcileFarm{}
 
 // ReconcileFarm reconciles a Farm object
 type ReconcileFarm struct {
-	client.Client
+	Client client.Client
+	Event  record.EventRecorder
 	scheme *runtime.Scheme
 }
 
 // Reconcile reads that state of the cluster for a Farm object and makes changes based on the state read
 // and what is in the Farm.Spec
-// TODO(user): Modify this Reconcile function to implement your Controller logic.  The scaffolding writes
-// a Deployment as an example
 // Automatically generate RBAC rules to allow the Controller to read and write Deployments
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=manager.external-loadbalancer,resources=farms,verbs=get;list;watch;create;update;patch;delete
 func (r *ReconcileFarm) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	// Fetch the Farm instance
 	instance := &managerv1alpha1.Farm{}
-	err := r.Get(context.TODO(), request.NamespacedName, instance)
+	err := r.Client.Get(context.TODO(), request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Object not found, return.  Created objects are automatically garbage collected.
@@ -110,57 +193,6 @@ func (r *ReconcileFarm) Reconcile(request reconcile.Request) (reconcile.Result, 
 		return reconcile.Result{}, err
 	}
 
-	// TODO(user): Change this to be the object type created by your controller
-	// Define the desired Deployment object
-	deploy := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      instance.Name + "-deployment",
-			Namespace: instance.Namespace,
-		},
-		Spec: appsv1.DeploymentSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{"deployment": instance.Name + "-deployment"},
-			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"deployment": instance.Name + "-deployment"}},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Name:  "nginx",
-							Image: "nginx",
-						},
-					},
-				},
-			},
-		},
-	}
-	if err := controllerutil.SetControllerReference(instance, deploy, r.scheme); err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// TODO(user): Change this for the object type created by your controller
-	// Check if the Deployment already exists
-	found := &appsv1.Deployment{}
-	err = r.Get(context.TODO(), types.NamespacedName{Name: deploy.Name, Namespace: deploy.Namespace}, found)
-	if err != nil && errors.IsNotFound(err) {
-		log.Printf("Creating Deployment %s/%s\n", deploy.Namespace, deploy.Name)
-		err = r.Create(context.TODO(), deploy)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-	} else if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// TODO(user): Change this for the object type created by your controller
-	// Update the found object and write the result back if there are any changes
-	if !reflect.DeepEqual(deploy.Spec, found.Spec) {
-		found.Spec = deploy.Spec
-		log.Printf("Updating Deployment %s/%s\n", deploy.Namespace, deploy.Name)
-		err = r.Update(context.TODO(), found)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-	}
+	log.Infof("%+v", instance)
 	return reconcile.Result{}, nil
 }

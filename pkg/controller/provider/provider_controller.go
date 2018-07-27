@@ -81,20 +81,20 @@ func newController(mgr manager.Manager, r reconcile.Reconciler) (controller.Cont
 	return c, nil
 }
 
-func (p *ProviderController) getProvider(farm managerv1alpha1.Farm) (*managerv1alpha1.Provider, error) {
-	var provider managerv1alpha1.Provider
-	err := p.ReconcileProvider.Client.Get(context.TODO(), client.ObjectKey{Name: farm.Name, Namespace: farm.Namespace}, &provider)
+func (p *ProviderController) getProvider(farm *managerv1alpha1.Farm) (*managerv1alpha1.Provider, error) {
+	provider := managerv1alpha1.Provider{}
+	err := p.ReconcileProvider.Client.Get(context.TODO(),
+		client.ObjectKey{Name: farm.Spec.Provider,
+			Namespace: managerv1alpha1.ControllerNamespace},
+		&provider)
 	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil, fmt.Errorf("Provider Not found for farm : %s", farm.Name)
-		}
 		return nil, err
 	}
 
 	return &provider, nil
 }
 
-func (p *ProviderController) CreateFarm(farm managerv1alpha1.Farm) (string, error) {
+func (p *ProviderController) CreateFarm(farm *managerv1alpha1.Farm) (string, error) {
 	provider, err := p.getProvider(farm)
 	if err != nil {
 		return "", nil
@@ -110,10 +110,11 @@ func (p *ProviderController) CreateFarm(farm managerv1alpha1.Farm) (string, erro
 		p.FarmUpdateSuccessStatus(farm, farmIpAddress, "Normal", "FarmCreated", fmt.Sprintf("Farm created on provider %s", provider.Name))
 	}
 
+	// TODO: Update Farm status
 	return farmIpAddress, nil
 }
 
-func (p *ProviderController) UpdateFarm(farm managerv1alpha1.Farm) (string, error) {
+func (p *ProviderController) UpdateFarm(farm *managerv1alpha1.Farm) (string, error) {
 	provider, err := p.getProvider(farm)
 	if err != nil {
 		return "", nil
@@ -132,7 +133,7 @@ func (p *ProviderController) UpdateFarm(farm managerv1alpha1.Farm) (string, erro
 	return farmIpAddress, nil
 }
 
-func (p *ProviderController) RemoveFarm(farm managerv1alpha1.Farm) error {
+func (p *ProviderController) RemoveFarm(farm *managerv1alpha1.Farm) error {
 	provider, err := p.getProvider(farm)
 	if err != nil {
 		return nil
@@ -184,21 +185,21 @@ func (p *ProviderController) ProviderUpdateSuccessStatus(provider *managerv1alph
 	p.ReconcileProvider.Client.Update(context.TODO(), provider)
 }
 
-func (p *ProviderController) FarmUpdateFailStatus(farm managerv1alpha1.Farm, eventType, reason, message string) {
+func (p *ProviderController) FarmUpdateFailStatus(farm *managerv1alpha1.Farm, eventType, reason, message string) {
 	p.ReconcileProvider.Event.Event(farm.DeepCopyObject(), eventType, reason, message)
 	farm.Status.ConnectionStatus = managerv1alpha1.ProviderConnectionStatusFail
 	farm.Status.LastUpdate = metav1.Time{}
-	p.ReconcileProvider.Client.Update(context.TODO(), &farm)
+	p.ReconcileProvider.Client.Update(context.TODO(), farm)
 
 }
 
-func (p *ProviderController) FarmUpdateSuccessStatus(farm managerv1alpha1.Farm, ipAddress, eventType, reason, message string) {
+func (p *ProviderController) FarmUpdateSuccessStatus(farm *managerv1alpha1.Farm, ipAddress, eventType, reason, message string) {
 	p.ReconcileProvider.Event.Event(farm.DeepCopy(), eventType, reason, message)
 	farm.Status.ConnectionStatus = managerv1alpha1.ProviderConnectionStatusSuccess
 	farm.Status.LastUpdate = metav1.Time{}
 	farm.Status.IpAdress = ipAddress
 	farm.Status.NodeList = p.ReconcileProvider.NodeList
-	p.ReconcileProvider.Client.Update(context.TODO(), &farm)
+	p.ReconcileProvider.Client.Update(context.TODO(), farm)
 }
 
 var _ reconcile.Reconciler = &ReconcileProvider{}
@@ -234,7 +235,7 @@ func (r *ReconcileProvider) Reconcile(request reconcile.Request) (reconcile.Resu
 		return reconcile.Result{}, err
 	}
 
-	fmt.Printf("%+v\n",instance)
+	fmt.Printf("%+v\n", instance)
 	return reconcile.Result{}, nil
 
 	//// TODO(user): Change this to be the object type created by your controller

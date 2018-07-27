@@ -25,6 +25,9 @@ const (
 	EventRecorderName   = "External-Loadbalancer"
 	ControllerNamespace = "External-LoadBalancer"
 
+	ExternalLoadbalancerAnnotationKey = "external.loadbalancer/provider"
+	ExternalLoadbalancerDefaultLabel  = "external-loadbalancer-default"
+
 	ProviderConnectionStatusFail    = "Failed"
 	ProviderConnectionStatusSuccess = "Synced"
 )
