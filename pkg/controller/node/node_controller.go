@@ -33,8 +33,8 @@ import (
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/provider"
 
 	"github.com/cloudflare/cfssl/log"
-	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/record"
 )
 
 type NodeController struct {
@@ -43,7 +43,7 @@ type NodeController struct {
 }
 
 func NewNodeController(mgr manager.Manager, kubeClient *kubernetes.Clientset, providerController *provider.ProviderController) (*NodeController, error) {
-	reconcileNode := newReconciler(mgr,kubeClient, providerController)
+	reconcileNode := newReconciler(mgr, kubeClient, providerController)
 
 	controllerInstance, err := newController(mgr, reconcileNode)
 	if err != nil {
@@ -57,9 +57,9 @@ func NewNodeController(mgr manager.Manager, kubeClient *kubernetes.Clientset, pr
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager,kubeClient *kubernetes.Clientset, ProviderController *provider.ProviderController) *ReconcileNode {
+func newReconciler(mgr manager.Manager, kubeClient *kubernetes.Clientset, ProviderController *provider.ProviderController) *ReconcileNode {
 	return &ReconcileNode{Client: mgr.GetClient(),
-		kubeClient: kubeClient,
+		kubeClient:         kubeClient,
 		scheme:             mgr.GetScheme(),
 		Event:              mgr.GetRecorder(managerv1alpha1.EventRecorderName),
 		ProviderController: ProviderController,
@@ -88,7 +88,7 @@ var _ reconcile.Reconciler = &ReconcileNode{}
 // ReconcileNode reconciles a Node object
 type ReconcileNode struct {
 	client.Client
-	kubeClient *kubernetes.Clientset
+	kubeClient         *kubernetes.Clientset
 	Event              record.EventRecorder
 	ProviderController *provider.ProviderController
 	scheme             *runtime.Scheme
@@ -100,7 +100,7 @@ func (r *ReconcileNode) updateProviderNodeList() error {
 	nodeList := make([]string, 0)
 
 	nodes := &corev1.NodeList{}
-	err := r.Client.List(context.Background(),nil,nodes)
+	err := r.Client.List(context.Background(), nil, nodes)
 	if err != nil {
 		return err
 	}
@@ -127,7 +127,7 @@ func (r *ReconcileNode) updateProviderNodeList() error {
 
 // Reconcile reads that state of the cluster for a Node object and makes changes based on the state read
 // and what is in the Node.Spec
-// +kubebuilder:rbac:groups=core,resources=nodes,verbs=get;list;watch;
+// +kubebuilder:rbac:groups=core,resources=nodes,verbs=get;list;watch
 func (r *ReconcileNode) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	// Check if this is the first running
 	if len(r.NodeMap) == 0 {

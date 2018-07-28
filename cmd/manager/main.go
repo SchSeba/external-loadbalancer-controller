@@ -19,14 +19,14 @@ package main
 import (
 	"log"
 
+	"flag"
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/apis"
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller"
+	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
-	"flag"
 )
 
 func main() {
@@ -58,7 +58,7 @@ func main() {
 	}
 
 	// Setup all Controllers
-	if err := controller.AddToManager(mgr,kubeClient); err != nil {
+	if err := controller.AddToManager(mgr, kubeClient); err != nil {
 		log.Fatal(err)
 	}
 

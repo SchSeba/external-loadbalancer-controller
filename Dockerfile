@@ -11,7 +11,7 @@ COPY vendor/ vendor/
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager github.com/k8s-external-lb/external-loadbalancer-controller/cmd/manager
 
 # Copy the controller-manager into a thin image
-FROM ubuntu:latest
+FROM centos:latest
 WORKDIR /root/
 COPY --from=builder /go/src/github.com/k8s-external-lb/external-loadbalancer-controller/manager .
 ENTRYPOINT ["./manager"]

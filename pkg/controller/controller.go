@@ -21,22 +21,22 @@ import (
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/node"
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/provider"
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/service"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 // AddToManagerFuncs is a list of functions to add all Controllers to the Manager
 var AddToManagerFuncs []func(manager.Manager) error
 
 // AddToManager adds all Controllers to the Manager
-func AddToManager(m manager.Manager,kubeClient *kubernetes.Clientset) error {
+func AddToManager(m manager.Manager, kubeClient *kubernetes.Clientset) error {
 
 	farmController, err := farm.NewFarmController(m)
 	if err != nil {
 		return err
 	}
 
-	providerController, err := provider.NewProviderController(m,kubeClient,farmController)
+	providerController, err := provider.NewProviderController(m, kubeClient, farmController)
 	if err != nil {
 		return err
 	}
@@ -46,7 +46,7 @@ func AddToManager(m manager.Manager,kubeClient *kubernetes.Clientset) error {
 		return err
 	}
 
-	_, err = service.NewServiceController(m,kubeClient, providerController, farmController)
+	_, err = service.NewServiceController(m, kubeClient, providerController, farmController)
 	if err != nil {
 		return err
 	}

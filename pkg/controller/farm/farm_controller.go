@@ -168,8 +168,8 @@ func (f *FarmController) createFarm(farmName string, service *corev1.Service) (*
 	farm := managerv1alpha1.Farm{ObjectMeta: metav1.ObjectMeta{Name: farmName,
 		Namespace: managerv1alpha1.ControllerNamespace},
 		Spec: managerv1alpha1.FarmSpec{Ports: service.Spec.Ports,
-			Provider: provider.Name,},
-		Status: managerv1alpha1.FarmStatus{ServiceVersion: service.ResourceVersion,NodeList:[]string{},LastUpdate:metav1.NewTime(time.Now())}}
+			Provider: provider.Name},
+		Status: managerv1alpha1.FarmStatus{ServiceVersion: service.ResourceVersion, NodeList: []string{}, LastUpdate: metav1.NewTime(time.Now())}}
 
 	err = f.Client.Create(context.Background(), &farm)
 	if err != nil {
@@ -190,8 +190,6 @@ type ReconcileFarm struct {
 
 // Reconcile reads that state of the cluster for a Farm object and makes changes based on the state read
 // and what is in the Farm.Spec
-// Automatically generate RBAC rules to allow the Controller to read and write Deployments
-// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=manager.external-loadbalancer,resources=farms,verbs=get;list;watch;create;update;patch;delete
 func (r *ReconcileFarm) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	// Fetch the Farm instance

@@ -32,11 +32,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"fmt"
+	"github.com/cloudflare/cfssl/log"
+	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/farm"
 	grpcClient "github.com/k8s-external-lb/external-loadbalancer-controller/pkg/grpc-client"
 	"k8s.io/client-go/kubernetes"
 	"time"
-	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/farm"
-	"github.com/cloudflare/cfssl/log"
 )
 
 /**
@@ -49,8 +49,8 @@ type ProviderController struct {
 	ReconcileProvider *ReconcileProvider
 }
 
-func NewProviderController(mgr manager.Manager,kubeClient *kubernetes.Clientset,farmController *farm.FarmController) (*ProviderController, error) {
-	reconcileProvider := newReconciler(mgr,kubeClient,farmController)
+func NewProviderController(mgr manager.Manager, kubeClient *kubernetes.Clientset, farmController *farm.FarmController) (*ProviderController, error) {
+	reconcileProvider := newReconciler(mgr, kubeClient, farmController)
 	controllerInstance, err := newController(mgr, reconcileProvider)
 	if err != nil {
 		return nil, err
@@ -61,13 +61,13 @@ func NewProviderController(mgr manager.Manager,kubeClient *kubernetes.Clientset,
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager,kubeClient *kubernetes.Clientset,farmController *farm.FarmController) *ReconcileProvider {
+func newReconciler(mgr manager.Manager, kubeClient *kubernetes.Clientset, farmController *farm.FarmController) *ReconcileProvider {
 	return &ReconcileProvider{Client: mgr.GetClient(),
-		kubeClient: kubeClient,
+		kubeClient:     kubeClient,
 		farmController: farmController,
-		scheme:   mgr.GetScheme(),
-		Event:    mgr.GetRecorder(managerv1alpha1.EventRecorderName),
-		NodeList: make([]string, 0)}
+		scheme:         mgr.GetScheme(),
+		Event:          mgr.GetRecorder(managerv1alpha1.EventRecorderName),
+		NodeList:       make([]string, 0)}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -136,7 +136,7 @@ func (p *ProviderController) UpdateFarm(farm *managerv1alpha1.Farm) (string, err
 	p.FarmUpdateSuccessStatus(farm, farmIpAddress, "Normal", "FarmUpdated", fmt.Sprintf("Farm updated on provider %s", provider.Name))
 
 	farm.Status.NodeList = p.ReconcileProvider.NodeList
-	p.ReconcileProvider.Client.Update(context.Background(),farm)
+	p.ReconcileProvider.Client.Update(context.Background(), farm)
 
 	return farmIpAddress, nil
 }
@@ -144,13 +144,13 @@ func (p *ProviderController) UpdateFarm(farm *managerv1alpha1.Farm) (string, err
 func (p *ProviderController) DeleteFarm(farmName string) {
 	farmInstance, err := p.ReconcileProvider.farmController.GetFarm(farmName)
 	if err != nil {
-		log.Error("Fail to get farm error: ",err)
+		log.Error("Fail to get farm error: ", err)
 		return
 	}
 
 	err = p.removeFarm(farmInstance)
 	if err != nil {
-		log.Error("Fail to delete farm error: ",err)
+		log.Error("Fail to delete farm error: ", err)
 		return
 	}
 }
@@ -164,13 +164,13 @@ func (p *ProviderController) removeFarm(farm *managerv1alpha1.Farm) error {
 	err = grpcClient.RemoveFarm(provider.Spec.Url, farm)
 	if err != nil {
 		p.FarmUpdateFailDeleteStatus(farm, "Warning", "FarmDeleted", err.Error())
-		p.ProviderUpdateFailStatus(provider, "Warning", "FarmDeleted", fmt.Sprint("Fail to delete farm error: ",err))
+		p.ProviderUpdateFailStatus(provider, "Warning", "FarmDeleted", fmt.Sprint("Fail to delete farm error: ", err))
 		return err
 	}
 
 	err = p.ReconcileProvider.Client.Delete(context.TODO(), farm)
 	if err != nil {
-		p.ProviderUpdateFailStatus(provider, "Warning", "FarmDeleted", fmt.Sprint("Fail to delete farm error: ",err))
+		p.ProviderUpdateFailStatus(provider, "Warning", "FarmDeleted", fmt.Sprint("Fail to delete farm error: ", err))
 		return err
 	}
 
@@ -256,19 +256,17 @@ var _ reconcile.Reconciler = &ReconcileProvider{}
 // ReconcileProvider reconciles a Provider object
 type ReconcileProvider struct {
 	client.Client
-	kubeClient *kubernetes.Clientset
+	kubeClient     *kubernetes.Clientset
 	farmController *farm.FarmController
-	Event    record.EventRecorder
-	scheme   *runtime.Scheme
-	NodeList []string
+	Event          record.EventRecorder
+	scheme         *runtime.Scheme
+	NodeList       []string
 }
 
 // TODO: Change this Shit
 
 // Reconcile reads that state of the cluster for a Provider object and makes changes based on the state read
 // and what is in the Provider.Spec
-// Automatically generate RBAC rules to allow the Controller to read and write Deployments
-// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=manager.external-loadbalancer,resources=providers,verbs=get;list;watch;create;update;patch;delete
 func (r *ReconcileProvider) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	// Fetch the Provider instance
@@ -286,58 +284,4 @@ func (r *ReconcileProvider) Reconcile(request reconcile.Request) (reconcile.Resu
 
 	fmt.Printf("%+v\n", instance)
 	return reconcile.Result{}, nil
-
-	//// TODO(user): Change this to be the object type created by your controller
-	//// Define the desired Deployment object
-	//deploy := &appsv1.Deployment{
-	//	ObjectMeta: metav1.ObjectMeta{
-	//		Name:      instance.Name + "-deployment",
-	//		Namespace: instance.Namespace,
-	//	},
-	//	Spec: appsv1.DeploymentSpec{
-	//		Selector: &metav1.LabelSelector{
-	//			MatchLabels: map[string]string{"deployment": instance.Name + "-deployment"},
-	//		},
-	//		Template: corev1.PodTemplateSpec{
-	//			ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"deployment": instance.Name + "-deployment"}},
-	//			Spec: corev1.PodSpec{
-	//				Containers: []corev1.Container{
-	//					{
-	//						Name:  "nginx",
-	//						Image: "nginx",
-	//					},
-	//				},
-	//			},
-	//		},
-	//	},
-	//}
-	//if err := controllerutil.SetControllerReference(instance, deploy, r.scheme); err != nil {
-	//	return reconcile.Result{}, err
-	//}
-	//
-	//// TODO(user): Change this for the object type created by your controller
-	//// Check if the Deployment already exists
-	//found := &appsv1.Deployment{}
-	//err = r.Get(context.TODO(), types.NamespacedName{Name: deploy.Name, Namespace: deploy.Namespace}, found)
-	//if err != nil && errors.IsNotFound(err) {
-	//	log.Debugf("Creating Deployment %s/%s\n", deploy.Namespace, deploy.Name)
-	//	err = r.Create(context.TODO(), deploy)
-	//	if err != nil {
-	//		return reconcile.Result{}, err
-	//	}
-	//} else if err != nil {
-	//	return reconcile.Result{}, err
-	//}
-	//
-	//// TODO(user): Change this for the object type created by your controller
-	//// Update the found object and write the result back if there are any changes
-	//if !reflect.DeepEqual(deploy.Spec, found.Spec) {
-	//	found.Spec = deploy.Spec
-	//	log.Debugf("Updating Deployment %s/%s\n", deploy.Namespace, deploy.Name)
-	//	err = r.Update(context.TODO(), found)
-	//	if err != nil {
-	//		return reconcile.Result{}, err
-	//	}
-	//}
-	//return reconcile.Result{}, nil
 }

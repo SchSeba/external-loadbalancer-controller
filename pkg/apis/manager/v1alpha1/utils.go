@@ -31,12 +31,10 @@ const (
 	ProviderConnectionStatusFail    = "Failed"
 	ProviderConnectionStatusSuccess = "Synced"
 
-	FarmStatusLabel = "external-loadbalancer-farm-status"
-	FarmStatusLabelSynced = "Synced"
-	FarmStatusLabelFailed = "Failed"
-	FarmStatusLabelDeleted= "Deleted"
-
-
+	FarmStatusLabel        = "external-loadbalancer-farm-status"
+	FarmStatusLabelSynced  = "Synced"
+	FarmStatusLabelFailed  = "Failed"
+	FarmStatusLabelDeleted = "Deleted"
 )
 
 var (
