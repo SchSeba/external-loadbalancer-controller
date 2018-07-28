@@ -35,8 +35,11 @@ import (
 	"fmt"
 	"github.com/cloudflare/cfssl/log"
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/farm"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/record"
+	"time"
 )
 
 type ServiceController struct {
@@ -53,6 +56,8 @@ func NewServiceController(mgr manager.Manager, kubeClient *kubernetes.Clientset,
 	}
 	serviceController := &ServiceController{Controller: controllerInstance,
 		ReconcileService: reconcileService}
+
+	go reconcileService.reSyncProcess()
 
 	return serviceController, nil
 
@@ -124,7 +129,19 @@ func (r *ReconcileService) Reconcile(request reconcile.Request) (reconcile.Resul
 	farmInstance, isCreated, err := r.FarmController.GetOrCreateFarm(service)
 	if err != nil {
 		log.Errorf("Fail to get or create farm from service %s in namespace %s error: ", service.Name, service.Namespace, err)
-		return reconcile.Result{}, err
+		if service.Labels == nil {
+			service.Labels = make(map[string]string)
+		}
+
+		if _, ok := service.Labels[managerv1alpha1.ServiceStatusLabel]; !ok {
+			service.Labels[managerv1alpha1.ServiceStatusLabel] = managerv1alpha1.ServiceStatusLabelFailed
+			err := r.Client.Update(context.Background(), service)
+			if err != nil {
+				log.Errorf("Fail to create label for service %s in namespace %s error: %s", service.Name, service.Namespace, err.Error())
+			}
+		}
+
+		return reconcile.Result{}, nil
 	}
 
 	serviceIpAddress := ""
@@ -138,13 +155,22 @@ func (r *ReconcileService) Reconcile(request reconcile.Request) (reconcile.Resul
 
 	if err != nil {
 		log.Errorf("Fail to create or update farm on provider for service %s in namespace %s", service.Name, service.Namespace)
-		return reconcile.Result{}, err
+		return reconcile.Result{}, nil
 	}
 
 	if serviceIpAddress != "" {
 		r.updateServiceStatus(serviceIpAddress, service)
 	}
 
+	if service.Labels != nil {
+		if _, ok := service.Labels[managerv1alpha1.ServiceStatusLabel]; ok {
+			delete(service.Labels, managerv1alpha1.ServiceStatusLabel)
+			err := r.Client.Update(context.Background(), service)
+			if err != nil {
+				log.Errorf("Fail to remove label from service %s in namespace %s error: %s", service.Name, service.Namespace, err.Error())
+			}
+		}
+	}
 	return reconcile.Result{}, nil
 }
 
@@ -161,4 +187,23 @@ func (r *ReconcileService) updateServiceStatus(serviceIpAddress string, service 
 	_, err := r.kubeClient.CoreV1().Services(service.Namespace).UpdateStatus(service)
 
 	return err
+}
+
+func (r *ReconcileService) reSyncProcess() {
+	resyncTick := time.Tick(30 * time.Second)
+
+	labelSelector := labels.Set{}
+	labelSelector[managerv1alpha1.ServiceStatusLabel] = managerv1alpha1.ServiceStatusLabelFailed
+
+	for range resyncTick {
+		var serviceList corev1.ServiceList
+		err := r.Client.List(context.TODO(), &client.ListOptions{LabelSelector: labelSelector.AsSelector()}, &serviceList)
+		if err != nil {
+			log.Error("reSyncProcess: Fail to get Service list")
+		} else {
+			for _, service := range serviceList.Items {
+				r.Reconcile(reconcile.Request{NamespacedName: types.NamespacedName{Namespace: service.Namespace, Name: service.Name}})
+			}
+		}
+	}
 }

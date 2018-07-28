@@ -35,6 +35,10 @@ const (
 	FarmStatusLabelSynced  = "Synced"
 	FarmStatusLabelFailed  = "Failed"
 	FarmStatusLabelDeleted = "Deleted"
+
+	ServiceStatusLabel       = "external-loadbalancer-service-status"
+	ServiceStatusLabelSynced = "Synced"
+	ServiceStatusLabelFailed = "Failed"
 )
 
 var (

@@ -26,8 +26,10 @@ import (
 
 // FarmSpec defines the desired state of Farm
 type FarmSpec struct {
-	Provider string `json:"provider"`
-	Ports    []corev1.ServicePort
+	ServiceName      string `json:"serviceName"`
+	ServiceNamespace string `json:"serviceNamespace"`
+	Provider         string `json:"provider"`
+	Ports            []corev1.ServicePort
 }
 
 // FarmStatus defines the observed state of Farm

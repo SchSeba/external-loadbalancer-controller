@@ -114,7 +114,7 @@ func (f *FarmController) GetFarm(farmName string) (*managerv1alpha1.Farm, error)
 }
 
 func (f *FarmController) NeedToUpdate(farm *managerv1alpha1.Farm, service *corev1.Service) bool {
-	if reflect.DeepEqual(farm.Spec.Ports, service.Spec.Ports) && service.Status.LoadBalancer.Ingress[0].IP == farm.Status.IpAdress {
+	if reflect.DeepEqual(farm.Spec.Ports, service.Spec.Ports) && service.Status.LoadBalancer.Ingress != nil && service.Status.LoadBalancer.Ingress[0].IP == farm.Status.IpAdress {
 		return false
 	}
 
@@ -168,7 +168,7 @@ func (f *FarmController) createFarm(farmName string, service *corev1.Service) (*
 	farm := managerv1alpha1.Farm{ObjectMeta: metav1.ObjectMeta{Name: farmName,
 		Namespace: managerv1alpha1.ControllerNamespace},
 		Spec: managerv1alpha1.FarmSpec{Ports: service.Spec.Ports,
-			Provider: provider.Name},
+			Provider: provider.Name, ServiceName: service.Name, ServiceNamespace: service.Namespace},
 		Status: managerv1alpha1.FarmStatus{ServiceVersion: service.ResourceVersion, NodeList: []string{}, LastUpdate: metav1.NewTime(time.Now())}}
 
 	err = f.Client.Create(context.Background(), &farm)

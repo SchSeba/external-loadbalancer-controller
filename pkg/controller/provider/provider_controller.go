@@ -20,6 +20,7 @@ import (
 	"context"
 	managerv1alpha1 "github.com/k8s-external-lb/external-loadbalancer-controller/pkg/apis/manager/v1alpha1"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -35,6 +36,7 @@ import (
 	"github.com/cloudflare/cfssl/log"
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/farm"
 	grpcClient "github.com/k8s-external-lb/external-loadbalancer-controller/pkg/grpc-client"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 	"time"
 )
@@ -56,8 +58,13 @@ func NewProviderController(mgr manager.Manager, kubeClient *kubernetes.Clientset
 		return nil, err
 	}
 
-	return &ProviderController{Controller: controllerInstance,
-		ReconcileProvider: reconcileProvider}, nil
+	providerController := &ProviderController{Controller: controllerInstance,
+		ReconcileProvider: reconcileProvider}
+
+	go providerController.reSyncProcess()
+	go providerController.cleanRemovedFarms()
+
+	return providerController, nil
 }
 
 // newReconciler returns a new reconcile.Reconciler
@@ -249,6 +256,47 @@ func (p *ProviderController) FarmUpdateSuccessStatus(farm *managerv1alpha1.Farm,
 	farm.Status.IpAdress = ipAddress
 	farm.Status.NodeList = p.ReconcileProvider.NodeList
 	p.ReconcileProvider.Client.Update(context.TODO(), farm)
+}
+
+func (p *ProviderController) reSyncProcess() {
+	resyncTick := time.Tick(30 * time.Second)
+
+	for range resyncTick {
+		var farmList managerv1alpha1.FarmList
+
+		// Sync farm need to be deleted
+		labelSelector := labels.Set{}
+		labelSelector[managerv1alpha1.FarmStatusLabel] = managerv1alpha1.FarmStatusLabelDeleted
+		err := p.ReconcileProvider.Client.List(context.TODO(), &client.ListOptions{LabelSelector: labelSelector.AsSelector()}, &farmList)
+		if err != nil {
+			log.Error("reSyncProcess: Fail to get farm list")
+		} else {
+			for _, farmInstance := range farmList.Items {
+				p.removeFarm(&farmInstance)
+			}
+		}
+	}
+}
+
+func (p *ProviderController) cleanRemovedFarms() {
+	cleanTick := time.Tick(10 * time.Second)
+
+	for range cleanTick {
+		var farmList = managerv1alpha1.FarmList{}
+		err := p.ReconcileProvider.Client.List(context.TODO(), nil, &farmList)
+		if err != nil {
+			log.Error("cleanRemovedFarms: Fail to get farm list")
+		} else {
+			service := &corev1.Service{}
+			for _, farmInstance := range farmList.Items {
+				err := p.ReconcileProvider.Client.Get(context.Background(), client.ObjectKey{Name: farmInstance.Spec.ServiceName, Namespace: farmInstance.Spec.ServiceNamespace}, service)
+				if err != nil && errors.IsNotFound(err) {
+					p.removeFarm(&farmInstance)
+				}
+			}
+		}
+
+	}
 }
 
 var _ reconcile.Reconciler = &ReconcileProvider{}
