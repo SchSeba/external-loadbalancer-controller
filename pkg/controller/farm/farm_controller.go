@@ -31,12 +31,14 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
+	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+	"time"
 )
 
 type FarmController struct {
@@ -101,12 +103,24 @@ func (f *FarmController) GetOrCreateFarm(service *corev1.Service) (*managerv1alp
 	return farm, isCreated, nil
 }
 
+func (f *FarmController) GetFarm(farmName string) (*managerv1alpha1.Farm, error) {
+	farm := &managerv1alpha1.Farm{}
+	err := f.Client.Get(context.TODO(), client.ObjectKey{Namespace: managerv1alpha1.ControllerNamespace, Name: farmName}, farm)
+	if err != nil {
+		return nil, err
+	}
+
+	return farm, nil
+}
+
 func (f *FarmController) NeedToUpdate(farm *managerv1alpha1.Farm, service *corev1.Service) bool {
-	if farm.Status.ServiceVersion == service.ResourceVersion {
+	if reflect.DeepEqual(farm.Spec.Ports, service.Spec.Ports) && service.Status.LoadBalancer.Ingress[0].IP == farm.Status.IpAdress {
 		return false
 	}
 
-	// TODO: Update the farm data
+	farm.Spec.Ports = service.Spec.Ports
+	farm.Status.ServiceVersion = service.ResourceVersion
+
 	return true
 }
 
@@ -127,7 +141,7 @@ func (f *FarmController) getProvider(service *corev1.Service) (*managerv1alpha1.
 	} else {
 		var providerList managerv1alpha1.ProviderList
 		labelSelector := labels.Set{}
-		labelSelector[managerv1alpha1.ExternalLoadbalancerDefaultLabel] = "Default"
+		labelSelector[managerv1alpha1.ExternalLoadbalancerDefaultLabel] = "true"
 		err = f.Client.List(context.TODO(), &client.ListOptions{LabelSelector: labelSelector.AsSelector()}, &providerList)
 		if err != nil {
 			return nil, err
@@ -154,10 +168,10 @@ func (f *FarmController) createFarm(farmName string, service *corev1.Service) (*
 	farm := managerv1alpha1.Farm{ObjectMeta: metav1.ObjectMeta{Name: farmName,
 		Namespace: managerv1alpha1.ControllerNamespace},
 		Spec: managerv1alpha1.FarmSpec{Ports: service.Spec.Ports,
-			Provider: provider.Name},
-		Status: managerv1alpha1.FarmStatus{ServiceVersion: service.ResourceVersion}}
+			Provider: provider.Name,},
+		Status: managerv1alpha1.FarmStatus{ServiceVersion: service.ResourceVersion,NodeList:[]string{},LastUpdate:metav1.NewTime(time.Now())}}
 
-	err = f.Client.Create(context.TODO(), &farm)
+	err = f.Client.Create(context.Background(), &farm)
 	if err != nil {
 		return nil, err
 	}

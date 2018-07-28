@@ -25,11 +25,10 @@ import (
 	"google.golang.org/grpc"
 
 	"context"
-	"fmt"
 )
 
 func getGrpcClient(url string) (pb.ExternalLoadBalancerClient, error) {
-	conn, err := grpc.Dial(fmt.Sprintf("url"), v1alpha1.GrpcDial)
+	conn, err := grpc.Dial(url, v1alpha1.GrpcDial)
 	if err != nil {
 		log.Error(err)
 		return nil, err

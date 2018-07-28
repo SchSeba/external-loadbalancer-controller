@@ -44,8 +44,9 @@ spec:
       - spec
       type: object
   version: v1alpha1
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: null
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: external-loadbalancer
+  namespace: ""

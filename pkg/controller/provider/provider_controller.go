@@ -33,6 +33,10 @@ import (
 
 	"fmt"
 	grpcClient "github.com/k8s-external-lb/external-loadbalancer-controller/pkg/grpc-client"
+	"k8s.io/client-go/kubernetes"
+	"time"
+	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/farm"
+	"github.com/cloudflare/cfssl/log"
 )
 
 /**
@@ -45,8 +49,8 @@ type ProviderController struct {
 	ReconcileProvider *ReconcileProvider
 }
 
-func NewProviderController(mgr manager.Manager) (*ProviderController, error) {
-	reconcileProvider := newReconciler(mgr)
+func NewProviderController(mgr manager.Manager,kubeClient *kubernetes.Clientset,farmController *farm.FarmController) (*ProviderController, error) {
+	reconcileProvider := newReconciler(mgr,kubeClient,farmController)
 	controllerInstance, err := newController(mgr, reconcileProvider)
 	if err != nil {
 		return nil, err
@@ -57,8 +61,10 @@ func NewProviderController(mgr manager.Manager) (*ProviderController, error) {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) *ReconcileProvider {
+func newReconciler(mgr manager.Manager,kubeClient *kubernetes.Clientset,farmController *farm.FarmController) *ReconcileProvider {
 	return &ReconcileProvider{Client: mgr.GetClient(),
+		kubeClient: kubeClient,
+		farmController: farmController,
 		scheme:   mgr.GetScheme(),
 		Event:    mgr.GetRecorder(managerv1alpha1.EventRecorderName),
 		NodeList: make([]string, 0)}
@@ -104,13 +110,13 @@ func (p *ProviderController) CreateFarm(farm *managerv1alpha1.Farm) (string, err
 	if err != nil {
 		p.ProviderUpdateFailStatus(provider, "Warning", "FarmCreated", err.Error())
 		p.FarmUpdateFailStatus(farm, "Warning", "FarmCreated", err.Error())
-		return "", err
 	} else {
 		p.ProviderUpdateSuccessStatus(provider, "Normal", "FarmCreated", fmt.Sprintf("Farm %s-%s created on provider", farm.Namespace, farm.Name))
 		p.FarmUpdateSuccessStatus(farm, farmIpAddress, "Normal", "FarmCreated", fmt.Sprintf("Farm created on provider %s", provider.Name))
+		farm.Status.IpAdress = farmIpAddress
 	}
 
-	// TODO: Update Farm status
+	farm.Status.NodeList = p.ReconcileProvider.NodeList
 	return farmIpAddress, nil
 }
 
@@ -125,15 +131,31 @@ func (p *ProviderController) UpdateFarm(farm *managerv1alpha1.Farm) (string, err
 		p.ProviderUpdateFailStatus(provider, "Warning", "FarmUpdated", err.Error())
 		p.FarmUpdateFailStatus(farm, "Warning", "FarmCreated", err.Error())
 		return "", err
-	} else {
-		p.ProviderUpdateSuccessStatus(provider, "Normal", "FarmUpdated", fmt.Sprintf("Farm %s-%s updated on provider", farm.Namespace, farm.Name))
-		p.FarmUpdateSuccessStatus(farm, farmIpAddress, "Normal", "FarmUpdated", fmt.Sprintf("Farm updated on provider %s", provider.Name))
 	}
+	p.ProviderUpdateSuccessStatus(provider, "Normal", "FarmUpdated", fmt.Sprintf("Farm %s-%s updated on provider", farm.Namespace, farm.Name))
+	p.FarmUpdateSuccessStatus(farm, farmIpAddress, "Normal", "FarmUpdated", fmt.Sprintf("Farm updated on provider %s", provider.Name))
+
+	farm.Status.NodeList = p.ReconcileProvider.NodeList
+	p.ReconcileProvider.Client.Update(context.Background(),farm)
 
 	return farmIpAddress, nil
 }
 
-func (p *ProviderController) RemoveFarm(farm *managerv1alpha1.Farm) error {
+func (p *ProviderController) DeleteFarm(farmName string) {
+	farmInstance, err := p.ReconcileProvider.farmController.GetFarm(farmName)
+	if err != nil {
+		log.Error("Fail to get farm error: ",err)
+		return
+	}
+
+	err = p.removeFarm(farmInstance)
+	if err != nil {
+		log.Error("Fail to delete farm error: ",err)
+		return
+	}
+}
+
+func (p *ProviderController) removeFarm(farm *managerv1alpha1.Farm) error {
 	provider, err := p.getProvider(farm)
 	if err != nil {
 		return nil
@@ -141,13 +163,14 @@ func (p *ProviderController) RemoveFarm(farm *managerv1alpha1.Farm) error {
 
 	err = grpcClient.RemoveFarm(provider.Spec.Url, farm)
 	if err != nil {
-		p.ProviderUpdateFailStatus(provider, "Warning", "FarmDeleted", err.Error())
+		p.FarmUpdateFailDeleteStatus(farm, "Warning", "FarmDeleted", err.Error())
+		p.ProviderUpdateFailStatus(provider, "Warning", "FarmDeleted", fmt.Sprint("Fail to delete farm error: ",err))
 		return err
 	}
 
-	err = p.ReconcileProvider.Client.Delete(context.TODO(), provider)
+	err = p.ReconcileProvider.Client.Delete(context.TODO(), farm)
 	if err != nil {
-		p.ProviderUpdateFailStatus(provider, "Warning", "FarmDeleted", err.Error())
+		p.ProviderUpdateFailStatus(provider, "Warning", "FarmDeleted", fmt.Sprint("Fail to delete farm error: ",err))
 		return err
 	}
 
@@ -172,23 +195,45 @@ func (p *ProviderController) UpdateNodes(nodes []string) {
 
 func (p *ProviderController) ProviderUpdateFailStatus(provider *managerv1alpha1.Provider, eventType, reason, message string) {
 	p.ReconcileProvider.Event.Event(provider.DeepCopyObject(), eventType, reason, message)
+	if provider.Labels == nil {
+		provider.Labels = make(map[string]string)
+	}
 	provider.Status.ConnectionStatus = managerv1alpha1.ProviderConnectionStatusFail
-	provider.Status.LastUpdate = metav1.Time{}
+	provider.Status.LastUpdate = metav1.NewTime(time.Now())
 	p.ReconcileProvider.Client.Update(context.TODO(), provider)
 
 }
 
 func (p *ProviderController) ProviderUpdateSuccessStatus(provider *managerv1alpha1.Provider, eventType, reason, message string) {
 	p.ReconcileProvider.Event.Event(provider.DeepCopy(), eventType, reason, message)
+	if provider.Labels == nil {
+		provider.Labels = make(map[string]string)
+	}
 	provider.Status.ConnectionStatus = managerv1alpha1.ProviderConnectionStatusSuccess
-	provider.Status.LastUpdate = metav1.Time{}
+	provider.Status.LastUpdate = metav1.NewTime(time.Now())
 	p.ReconcileProvider.Client.Update(context.TODO(), provider)
 }
 
 func (p *ProviderController) FarmUpdateFailStatus(farm *managerv1alpha1.Farm, eventType, reason, message string) {
 	p.ReconcileProvider.Event.Event(farm.DeepCopyObject(), eventType, reason, message)
+	if farm.Labels == nil {
+		farm.Labels = make(map[string]string)
+	}
+	farm.Labels[managerv1alpha1.FarmStatusLabel] = managerv1alpha1.FarmStatusLabelFailed
 	farm.Status.ConnectionStatus = managerv1alpha1.ProviderConnectionStatusFail
-	farm.Status.LastUpdate = metav1.Time{}
+	farm.Status.LastUpdate = metav1.NewTime(time.Now())
+	p.ReconcileProvider.Client.Update(context.TODO(), farm)
+
+}
+
+func (p *ProviderController) FarmUpdateFailDeleteStatus(farm *managerv1alpha1.Farm, eventType, reason, message string) {
+	p.ReconcileProvider.Event.Event(farm.DeepCopyObject(), eventType, reason, message)
+	if farm.Labels == nil {
+		farm.Labels = make(map[string]string)
+	}
+	farm.Labels[managerv1alpha1.FarmStatusLabel] = managerv1alpha1.FarmStatusLabelDeleted
+	farm.Status.ConnectionStatus = managerv1alpha1.ProviderConnectionStatusFail
+	farm.Status.LastUpdate = metav1.NewTime(time.Now())
 	p.ReconcileProvider.Client.Update(context.TODO(), farm)
 
 }
@@ -196,7 +241,11 @@ func (p *ProviderController) FarmUpdateFailStatus(farm *managerv1alpha1.Farm, ev
 func (p *ProviderController) FarmUpdateSuccessStatus(farm *managerv1alpha1.Farm, ipAddress, eventType, reason, message string) {
 	p.ReconcileProvider.Event.Event(farm.DeepCopy(), eventType, reason, message)
 	farm.Status.ConnectionStatus = managerv1alpha1.ProviderConnectionStatusSuccess
-	farm.Status.LastUpdate = metav1.Time{}
+	if farm.Labels == nil {
+		farm.Labels = make(map[string]string)
+	}
+	farm.Labels[managerv1alpha1.FarmStatusLabel] = managerv1alpha1.FarmStatusLabelSynced
+	farm.Status.LastUpdate = metav1.NewTime(time.Now())
 	farm.Status.IpAdress = ipAddress
 	farm.Status.NodeList = p.ReconcileProvider.NodeList
 	p.ReconcileProvider.Client.Update(context.TODO(), farm)
@@ -207,6 +256,8 @@ var _ reconcile.Reconciler = &ReconcileProvider{}
 // ReconcileProvider reconciles a Provider object
 type ReconcileProvider struct {
 	client.Client
+	kubeClient *kubernetes.Clientset
+	farmController *farm.FarmController
 	Event    record.EventRecorder
 	scheme   *runtime.Scheme
 	NodeList []string
@@ -216,8 +267,6 @@ type ReconcileProvider struct {
 
 // Reconcile reads that state of the cluster for a Provider object and makes changes based on the state read
 // and what is in the Provider.Spec
-// TODO(user): Modify this Reconcile function to implement your Controller logic.  The scaffolding writes
-// a Deployment as an example
 // Automatically generate RBAC rules to allow the Controller to read and write Deployments
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=manager.external-loadbalancer,resources=providers,verbs=get;list;watch;create;update;patch;delete

@@ -1,0 +1,9 @@
+apiVersion: manager.external-loadbalancer/v1alpha1
+kind: Farm
+metadata:
+  labels:
+    controller-tools.k8s.io: "1.0"
+  name: farm-sample
+spec:
+  # Add fields here
+  foo: bar

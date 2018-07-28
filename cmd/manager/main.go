@@ -24,10 +24,15 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
+	"flag"
 )
 
 func main() {
+
+	flag.Parse()
+
 	// Get a config to talk to the apiserver
 	cfg, err := config.GetConfig()
 	if err != nil {
@@ -40,6 +45,11 @@ func main() {
 		log.Fatal(err)
 	}
 
+	kubeClient, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	log.Printf("Registering Components.")
 
 	// Setup Scheme for all resources
@@ -48,7 +58,7 @@ func main() {
 	}
 
 	// Setup all Controllers
-	if err := controller.AddToManager(mgr); err != nil {
+	if err := controller.AddToManager(mgr,kubeClient); err != nil {
 		log.Fatal(err)
 	}
 

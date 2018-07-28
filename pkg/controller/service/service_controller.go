@@ -35,6 +35,8 @@ import (
 	"github.com/cloudflare/cfssl/log"
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/farm"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/kubernetes"
+	"fmt"
 )
 
 type ServiceController struct {
@@ -42,8 +44,8 @@ type ServiceController struct {
 	ReconcileService reconcile.Reconciler
 }
 
-func NewServiceController(mgr manager.Manager, providerController *provider.ProviderController, farmController *farm.FarmController) (*ServiceController, error) {
-	reconcileService := newReconciler(mgr, providerController, farmController)
+func NewServiceController(mgr manager.Manager,kubeClient *kubernetes.Clientset, providerController *provider.ProviderController, farmController *farm.FarmController) (*ServiceController, error) {
+	reconcileService := newReconciler(mgr,kubeClient, providerController, farmController)
 
 	controllerInstance, err := newController(mgr, reconcileService)
 	if err != nil {
@@ -57,8 +59,9 @@ func NewServiceController(mgr manager.Manager, providerController *provider.Prov
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, ProviderController *provider.ProviderController, farmController *farm.FarmController) *ReconcileService {
+func newReconciler(mgr manager.Manager,kubeClient *kubernetes.Clientset, ProviderController *provider.ProviderController, farmController *farm.FarmController) *ReconcileService {
 	return &ReconcileService{Client: mgr.GetClient(),
+		kubeClient:kubeClient,
 		scheme:             mgr.GetScheme(),
 		Event:              mgr.GetRecorder(managerv1alpha1.EventRecorderName),
 		ProviderController: ProviderController,
@@ -87,6 +90,7 @@ var _ reconcile.Reconciler = &ReconcileService{}
 // ReconcileService reconciles a Service object
 type ReconcileService struct {
 	client.Client
+	kubeClient *kubernetes.Clientset
 	Event              record.EventRecorder
 	ProviderController *provider.ProviderController
 	FarmController     *farm.FarmController
@@ -102,6 +106,7 @@ func (r *ReconcileService) Reconcile(request reconcile.Request) (reconcile.Resul
 	err := r.Get(context.TODO(), request.NamespacedName, service)
 	if err != nil {
 		if errors.IsNotFound(err) {
+			r.ProviderController.DeleteFarm(fmt.Sprintf("%s-%s",request.Namespace,request.Name))
 			// Object not found, return.  Created objects are automatically garbage collected.
 			// For additional cleanup logic use finalizers.
 			return reconcile.Result{}, nil
@@ -110,15 +115,20 @@ func (r *ReconcileService) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, err
 	}
 
-	log.Infof("%+v", service)
+	if service.Spec.Type != "LoadBalancer" || len(service.Finalizers) != 0 {
+		return reconcile.Result{}, nil
+	}
+
+	log.Infof("%+v", *service)
 
 	farmInstance, isCreated, err := r.FarmController.GetOrCreateFarm(service)
 	if err != nil {
-		log.Errorf("Fail to get or create farm from service %s in namespace %s", service.Name, service.Namespace)
+		log.Errorf("Fail to get or create farm from service %s in namespace %s error: ", service.Name, service.Namespace,err)
 		return reconcile.Result{}, err
 	}
 
-	var serviceIpAddress string
+	serviceIpAddress := ""
+	err = nil
 
 	if isCreated {
 		serviceIpAddress, err = r.ProviderController.CreateFarm(farmInstance)
@@ -131,10 +141,24 @@ func (r *ReconcileService) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, err
 	}
 
-	r.updateServiceStatus(serviceIpAddress, service)
+	if serviceIpAddress != "" {
+		r.updateServiceStatus(serviceIpAddress, service)
+	}
+
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileService) updateServiceStatus(serviceIpAddress string, service *corev1.Service) {
+func (r *ReconcileService) updateServiceStatus(serviceIpAddress string, service *corev1.Service) error {
+	service.Status = corev1.ServiceStatus{
+		LoadBalancer: corev1.LoadBalancerStatus{
+			Ingress: []corev1.LoadBalancerIngress{
+				{
+					IP: serviceIpAddress,
+				},
+			},
+		},}
 
+	_, err := r.kubeClient.CoreV1().Services(service.Namespace).UpdateStatus(service)
+
+	return err
 }

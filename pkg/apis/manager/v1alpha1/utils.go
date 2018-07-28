@@ -23,13 +23,20 @@ import (
 
 const (
 	EventRecorderName   = "External-Loadbalancer"
-	ControllerNamespace = "External-LoadBalancer"
+	ControllerNamespace = "external-loadbalancer"
 
 	ExternalLoadbalancerAnnotationKey = "external.loadbalancer/provider"
 	ExternalLoadbalancerDefaultLabel  = "external-loadbalancer-default"
 
 	ProviderConnectionStatusFail    = "Failed"
 	ProviderConnectionStatusSuccess = "Synced"
+
+	FarmStatusLabel = "external-loadbalancer-farm-status"
+	FarmStatusLabelSynced = "Synced"
+	FarmStatusLabelFailed = "Failed"
+	FarmStatusLabelDeleted= "Deleted"
+
+
 )
 
 var (
