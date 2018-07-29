@@ -1,61 +1,12 @@
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  creationTimestamp: null
-  name: manager-role
-rules:
-- apiGroups:
-  - manager.external-loadbalancer
-  resources:
-  - farms
-  verbs:
-  - get
-  - list
-  - watch
-  - create
-  - update
-  - patch
-  - delete
-- apiGroups:
-  - ""
-  resources:
-  - nodes
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - manager.external-loadbalancer
-  resources:
-  - providers
-  verbs:
-  - get
-  - list
-  - watch
-  - create
-  - update
-  - patch
-  - delete
-- apiGroups:
-  - ""
-  resources:
-  - services
-  verbs:
-  - get
-  - list
-  - watch
-  - update
-  - patch
----
-apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   creationTimestamp: null
-  name: external-loadbalancer-rolebinding
+  name: manager-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: manager-role
+  name: cluster-admin
 subjects:
 - kind: ServiceAccount
   name: default
@@ -87,7 +38,13 @@ spec:
           properties:
             provider:
               type: string
+            serviceName:
+              type: string
+            serviceNamespace:
+              type: string
           required:
+          - serviceName
+          - serviceNamespace
           - provider
           type: object
         status:
