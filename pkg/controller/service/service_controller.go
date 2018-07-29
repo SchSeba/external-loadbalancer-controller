@@ -104,7 +104,8 @@ type ReconcileService struct {
 
 // Reconcile reads that state of the cluster for a Service object and makes changes based on the state read
 // and what is in the Service.Spec
-// +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=core,resources=services,verbs=create;get;list;watch;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 func (r *ReconcileService) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	// Fetch the Service instance
 	service := &corev1.Service{}

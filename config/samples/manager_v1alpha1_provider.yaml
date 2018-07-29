@@ -1,3 +1,44 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    controller-tools.k8s.io: "1.0"
+  name: external-loadbalancer
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: example-provider
+  namespace: external-loadbalancer
+spec:
+  selector:
+    app: example-provider
+  ports:
+  - protocol: TCP
+    port: 8050
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: example-provider
+  namespace: external-loadbalancer
+spec:
+  selector:
+    matchLabels:
+      app: example-provider
+  template:
+    metadata:
+      labels:
+        app: example-provider
+    spec:
+      containers:
+      - image: quay.io/k8s-external-loadbalancer/go-grcp-server:latest
+        name: example-provider
+        ports:
+          - containerPort: 8050
+      terminationGracePeriodSeconds: 10
+---
 apiVersion: manager.external-loadbalancer/v1alpha1
 kind: Provider
 metadata:
@@ -8,5 +49,5 @@ metadata:
   namespace: external-loadbalancer
 spec:
   # Add fields here
-  url: 127.0.0.1:8050
+  url: example-provider:8050
   default: true
