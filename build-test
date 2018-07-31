@@ -1,0 +1,2 @@
+#!/bin/bash
+docker run -it --rm -v $(pwd):$(pwd) -w $(pwd) golang:1.10.3 make test

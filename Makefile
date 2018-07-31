@@ -5,7 +5,7 @@ IMG ?= quay.io/k8s-external-loadbalancer/controller:latest
 all: test manager
 
 # Run tests
-test: generate fmt vet manifests
+test: generate fmt vet #manifests
 	go test ./pkg/... ./cmd/... -coverprofile cover.out
 
 # Build manager binary
@@ -26,8 +26,8 @@ deploy: manifests
 
 # Generate manifests e.g. CRD, RBAC etc.
 # TODO: need to fix the CRD generator remove the status section. then return the command to all
-manifests:
-	go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go rbac
+# manifests:
+# 	go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go rbac
 
 # Run go fmt against code
 fmt:
@@ -41,8 +41,12 @@ vet:
 generate:
 	go generate ./pkg/... ./cmd/...
 
+# Test Inside a docker
+docker-test:
+	./build-test.sh
+
 # Build the docker image
-docker-build: test
+docker-build: docker-test
 	docker build . -t ${IMG}
 
 # Push the docker image
