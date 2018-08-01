@@ -35,7 +35,6 @@ type ProviderSpec struct {
 type ProviderStatus struct {
 	ConnectionStatus string      `json:"connectionStatus"`
 	LastUpdate       metav1.Time `json:"lastUpdate"`
-	Farms            FarmList
 }
 
 // +genclient

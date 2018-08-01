@@ -35,6 +35,7 @@ import (
 	"github.com/cloudflare/cfssl/log"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/record"
+	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/farm"
 )
 
 type NodeController struct {
@@ -42,8 +43,8 @@ type NodeController struct {
 	ReconcileNode reconcile.Reconciler
 }
 
-func NewNodeController(mgr manager.Manager, kubeClient *kubernetes.Clientset, providerController *provider.ProviderController) (*NodeController, error) {
-	reconcileNode := newReconciler(mgr, kubeClient, providerController)
+func NewNodeController(mgr manager.Manager, kubeClient *kubernetes.Clientset, farmController *farm.FarmController) (*NodeController, error) {
+	reconcileNode := newReconciler(mgr, kubeClient, farmController)
 
 	controllerInstance, err := newController(mgr, reconcileNode)
 	if err != nil {
@@ -57,12 +58,12 @@ func NewNodeController(mgr manager.Manager, kubeClient *kubernetes.Clientset, pr
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, kubeClient *kubernetes.Clientset, ProviderController *provider.ProviderController) *ReconcileNode {
+func newReconciler(mgr manager.Manager, kubeClient *kubernetes.Clientset,farmController *farm.FarmController) *ReconcileNode {
 	return &ReconcileNode{Client: mgr.GetClient(),
 		kubeClient:         kubeClient,
+		farmController: farmController,
 		scheme:             mgr.GetScheme(),
 		Event:              mgr.GetRecorder(managerv1alpha1.EventRecorderName),
-		ProviderController: ProviderController,
 		NodeMap:            make(map[string]string)}
 }
 
@@ -90,7 +91,7 @@ type ReconcileNode struct {
 	client.Client
 	kubeClient         *kubernetes.Clientset
 	Event              record.EventRecorder
-	ProviderController *provider.ProviderController
+	farmController *farm.FarmController
 	scheme             *runtime.Scheme
 	NodeMap            map[string]string
 }

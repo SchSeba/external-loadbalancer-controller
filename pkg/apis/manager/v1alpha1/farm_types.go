@@ -29,14 +29,13 @@ type FarmSpec struct {
 	ServiceName      string `json:"serviceName"`
 	ServiceNamespace string `json:"serviceNamespace"`
 	Provider         string `json:"provider"`
-	Ports            []corev1.ServicePort
+	Ports            []corev1.ServicePort `json:"ports"`
 }
 
 // FarmStatus defines the observed state of Farm
 type FarmStatus struct {
 	IpAdress         string      `json:"ipAdress"`
 	NodeList         []string    `json:"nodeList"`
-	ServiceVersion   string      `json:"serviceVersion"`
 	ConnectionStatus string      `json:"connectionStatus"`
 	LastUpdate       metav1.Time `json:"lastUpdate"`
 }

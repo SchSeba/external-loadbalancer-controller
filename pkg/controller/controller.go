@@ -31,22 +31,22 @@ var AddToManagerFuncs []func(manager.Manager) error
 // AddToManager adds all Controllers to the Manager
 func AddToManager(m manager.Manager, kubeClient *kubernetes.Clientset) error {
 
-	farmController, err := farm.NewFarmController(m)
+	providerController, err := provider.NewProviderController(m, kubeClient)
 	if err != nil {
 		return err
 	}
 
-	providerController, err := provider.NewProviderController(m, kubeClient, farmController)
+	farmController, err := farm.NewFarmController(m,providerController)
 	if err != nil {
 		return err
 	}
 
-	_, err = node.NewNodeController(m, kubeClient, providerController)
+	_, err = node.NewNodeController(m, kubeClient, farmController)
 	if err != nil {
 		return err
 	}
 
-	_, err = service.NewServiceController(m, kubeClient, providerController, farmController)
+	_, err = service.NewServiceController(m, kubeClient, farmController)
 	if err != nil {
 		return err
 	}

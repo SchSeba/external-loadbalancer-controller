@@ -37,7 +37,7 @@ func getGrpcClient(url string) (pb.ExternalLoadBalancerClient, error) {
 	return pb.NewExternalLoadBalancerClient(conn), nil
 }
 
-func CreateFarm(url string, farm *v1alpha1.Farm, nodes []string) (string, error) {
+func CreateFarm(url string, farm *v1alpha1.Farm) (string, error) {
 	client, err := getGrpcClient(url)
 	if err != nil {
 		return "", err
@@ -46,7 +46,10 @@ func CreateFarm(url string, farm *v1alpha1.Farm, nodes []string) (string, error)
 	ctx, cancel := context.WithTimeout(context.Background(), v1alpha1.GrpcTimeout)
 	defer cancel()
 
-	result, err := client.Create(ctx, &pb.Data{Nodes: nodes, Ports: createFarmPorts(farm)})
+	result, err := client.Create(ctx, &pb.Data{Nodes: farm.Status.NodeList, Ports: createFarmPorts(farm)})
+	if err != nil {
+		return "",err
+	}
 	return result.FarmAddress, err
 }
 
@@ -60,6 +63,9 @@ func UpdateFarm(url string, farm *v1alpha1.Farm) (string, error) {
 	defer cancel()
 
 	result, err := client.Update(ctx, &pb.Data{Nodes: []string{}, Ports: createFarmPorts(farm)})
+	if err != nil {
+		 return "",err
+	}
 	return result.FarmAddress, err
 }
 

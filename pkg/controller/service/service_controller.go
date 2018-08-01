@@ -30,7 +30,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	managerv1alpha1 "github.com/k8s-external-lb/external-loadbalancer-controller/pkg/apis/manager/v1alpha1"
-	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/provider"
 
 	"fmt"
 	"github.com/cloudflare/cfssl/log"
@@ -47,8 +46,8 @@ type ServiceController struct {
 	ReconcileService reconcile.Reconciler
 }
 
-func NewServiceController(mgr manager.Manager, kubeClient *kubernetes.Clientset, providerController *provider.ProviderController, farmController *farm.FarmController) (*ServiceController, error) {
-	reconcileService := newReconciler(mgr, kubeClient, providerController, farmController)
+func NewServiceController(mgr manager.Manager, kubeClient *kubernetes.Clientset, farmController *farm.FarmController) (*ServiceController, error) {
+	reconcileService := newReconciler(mgr, kubeClient, farmController)
 
 	controllerInstance, err := newController(mgr, reconcileService)
 	if err != nil {
@@ -64,12 +63,11 @@ func NewServiceController(mgr manager.Manager, kubeClient *kubernetes.Clientset,
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, kubeClient *kubernetes.Clientset, ProviderController *provider.ProviderController, farmController *farm.FarmController) *ReconcileService {
+func newReconciler(mgr manager.Manager, kubeClient *kubernetes.Clientset, farmController *farm.FarmController) *ReconcileService {
 	return &ReconcileService{Client: mgr.GetClient(),
 		kubeClient:         kubeClient,
 		scheme:             mgr.GetScheme(),
 		Event:              mgr.GetRecorder(managerv1alpha1.EventRecorderName),
-		ProviderController: ProviderController,
 		FarmController:     farmController}
 }
 
@@ -97,7 +95,6 @@ type ReconcileService struct {
 	client.Client
 	kubeClient         *kubernetes.Clientset
 	Event              record.EventRecorder
-	ProviderController *provider.ProviderController
 	FarmController     *farm.FarmController
 	scheme             *runtime.Scheme
 }
@@ -112,7 +109,7 @@ func (r *ReconcileService) Reconcile(request reconcile.Request) (reconcile.Resul
 	err := r.Get(context.TODO(), request.NamespacedName, service)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			r.ProviderController.DeleteFarm(fmt.Sprintf("%s-%s", request.Namespace, request.Name))
+			r.FarmController.DeleteFarm(request.Namespace, request.Name)
 			// Object not found, return.  Created objects are automatically garbage collected.
 			// For additional cleanup logic use finalizers.
 			return reconcile.Result{}, nil
@@ -126,6 +123,10 @@ func (r *ReconcileService) Reconcile(request reconcile.Request) (reconcile.Resul
 	}
 
 	log.Infof("%+v", *service)
+
+	r.FarmController.CreateOrUpdateFarm(service)
+	return reconcile.Result{}, nil
+
 
 	farmInstance, isCreated, err := r.FarmController.GetOrCreateFarm(service)
 	if err != nil {
@@ -176,15 +177,13 @@ func (r *ReconcileService) Reconcile(request reconcile.Request) (reconcile.Resul
 }
 
 func (r *ReconcileService) updateServiceStatus(serviceIpAddress string, service *corev1.Service) error {
-	service.Status = corev1.ServiceStatus{
-		LoadBalancer: corev1.LoadBalancerStatus{
-			Ingress: []corev1.LoadBalancerIngress{
-				{
-					IP: serviceIpAddress,
-				},
-			},
-		}}
+	//service.Spec.ExternalIPs = []string{serviceIpAddress}
 
+	if service.Status.LoadBalancer.Ingress == nil {
+		service.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{}
+	}
+
+	service.Status.LoadBalancer.Ingress = append(service.Status.LoadBalancer.Ingress, corev1.LoadBalancerIngress{IP:serviceIpAddress})
 	_, err := r.kubeClient.CoreV1().Services(service.Namespace).UpdateStatus(service)
 
 	return err
