@@ -16,11 +16,16 @@ limitations under the License.
 
 package grpc_client
 
+//go:generate mockgen -source $GOFILE -package=$GOPACKAGE -destination=generated_mock_$GOFILE
+
+/*
+ ATTENTION: Rerun code generators when interface signatures are modified.
+*/
+
 import (
 	pb "github.com/k8s-external-lb/Proto"
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/apis/manager/v1alpha1"
-
-	"github.com/cloudflare/cfssl/log"
+	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/log"
 
 	"google.golang.org/grpc"
 
@@ -30,7 +35,7 @@ import (
 func getGrpcClient(url string) (pb.ExternalLoadBalancerClient, error) {
 	conn, err := grpc.Dial(url, v1alpha1.GrpcDial)
 	if err != nil {
-		log.Error(err)
+		log.Log.Error(err)
 		return nil, err
 	}
 
