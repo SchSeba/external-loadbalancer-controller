@@ -18,26 +18,26 @@ package provider
 
 import (
 	"context"
-	managerv1alpha1 "github.com/k8s-external-lb/external-loadbalancer-controller/pkg/apis/manager/v1alpha1"
+	"fmt"
+	"time"
 
-	corev1 "k8s.io/api/core/v1"
+	managerv1alpha1 "github.com/k8s-external-lb/external-loadbalancer-controller/pkg/apis/manager/v1alpha1"
+	grpcClient "github.com/k8s-external-lb/external-loadbalancer-controller/pkg/grpc-client"
+	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/log"
+
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+
 	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/kubernetes"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	"fmt"
-	"github.com/cloudflare/cfssl/log"
-	grpcClient "github.com/k8s-external-lb/external-loadbalancer-controller/pkg/grpc-client"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/kubernetes"
-	"time"
 )
 
 /**
@@ -50,8 +50,8 @@ type ProviderController struct {
 	ReconcileProvider *ReconcileProvider
 }
 
-func NewProviderController(mgr manager.Manager, kubeClient *kubernetes.Clientset) (*ProviderController, error) {
-	reconcileProvider := newReconciler(mgr, kubeClient)
+func NewProviderController(mgr manager.Manager, kubeClient *kubernetes.Clientset,nodeList []string) (*ProviderController, error) {
+	reconcileProvider := newReconciler(mgr, kubeClient,nodeList)
 	controllerInstance, err := newController(mgr, reconcileProvider)
 	if err != nil {
 		return nil, err
@@ -60,19 +60,16 @@ func NewProviderController(mgr manager.Manager, kubeClient *kubernetes.Clientset
 	providerController := &ProviderController{Controller: controllerInstance,
 		ReconcileProvider: reconcileProvider}
 
-	go providerController.reSyncProcess()
-	go providerController.cleanRemovedFarms()
-
 	return providerController, nil
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, kubeClient *kubernetes.Clientset) *ReconcileProvider {
+func newReconciler(mgr manager.Manager, kubeClient *kubernetes.Clientset,nodeList []string) *ReconcileProvider {
 	return &ReconcileProvider{Client: mgr.GetClient(),
 		kubeClient:     kubeClient,
 		scheme:         mgr.GetScheme(),
 		Event:          mgr.GetRecorder(managerv1alpha1.EventRecorderName),
-		NodeList:       make([]string, 0)}
+		NodeList:       nodeList}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -108,114 +105,131 @@ func (p *ProviderController) getProvider(farm *managerv1alpha1.Farm) (*managerv1
 func (p *ProviderController) CreateFarm(farm *managerv1alpha1.Farm) (string, error) {
 	provider, err := p.getProvider(farm)
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 
 	farm.Status.NodeList = p.ReconcileProvider.NodeList
 	farmIpAddress, err := grpcClient.CreateFarm(provider.Spec.Url, farm)
 
 	if err != nil {
-		p.ProviderUpdateFailStatus(provider, "Warning", "FarmCreatedFail", err.Error())
+		log.Log.V(2).Errorf("Fail to create farm: %s on provider %s error message: %s", farm.FarmName(),provider.Name,err.Error())
+		p.ProviderUpdateFailStatus(provider, "Warning", "FarmCreateFail", err.Error())
 		return "",err
-		//p.FarmUpdateFailStatus(farm, "Warning", "FarmCreated", err.Error())
-	} else {
-		//p.FarmUpdateSuccessStatus(farm, farmIpAddress, "Normal", "FarmCreated", fmt.Sprintf("Farm created on provider %s", provider.Name))
 	}
 
-	p.ProviderUpdateSuccessStatus(provider, "Normal", "FarmCreatedSuccess", fmt.Sprintf("Farm %s-%s created on provider", farm.Namespace, farm.Name))
+	p.ProviderUpdateSuccessStatus(provider, "Normal", "FarmCreateSuccess", fmt.Sprintf("Farm %s-%s was created on provider", farm.Namespace, farm.Name))
 	return farmIpAddress, nil
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
-func (p *ProviderController) UpdateFarm(farm *managerv1alpha1.Farm) (string, error) {
+func (p *ProviderController) UpdateFarm(farm *managerv1alpha1.Farm) (string,error) {
 	provider, err := p.getProvider(farm)
 	if err != nil {
-		return "", nil
-	}
-
-	farmIpAddress, err := grpcClient.UpdateFarm(provider.Spec.Url, farm)
-	if err != nil {
-		p.ProviderUpdateFailStatus(provider, "Warning", "FarmUpdated", err.Error())
-		p.FarmUpdateFailStatus(farm, "Warning", "FarmCreated", err.Error())
 		return "", err
 	}
-	p.ProviderUpdateSuccessStatus(provider, "Normal", "FarmUpdated", fmt.Sprintf("Farm %s-%s updated on provider", farm.Namespace, farm.Name))
-	p.FarmUpdateSuccessStatus(farm, farmIpAddress, "Normal", "FarmUpdated", fmt.Sprintf("Farm updated on provider %s", provider.Name))
 
 	farm.Status.NodeList = p.ReconcileProvider.NodeList
-	p.ReconcileProvider.Client.Update(context.Background(), farm)
-
-	return farmIpAddress, nil
-}
-
-func (p *ProviderController) DeleteFarm(farmName string) {
-	farmInstance, err := p.ReconcileProvider.farmController.GetFarm(farmName)
+	farmIpAddress, err := grpcClient.UpdateFarm(provider.Spec.Url, farm)
 	if err != nil {
-		log.Error("Fail to get farm error: ", err)
-		return
+		log.Log.V(2).Errorf("Fail to update farm: %s on provider %s error message: %s", farm.FarmName(),provider.Name,err.Error())
+		p.ProviderUpdateFailStatus(provider, "Warning", "FarmUpdateFail", err.Error())
+		return "",err
 	}
 
-	err = p.removeFarm(farmInstance)
-	if err != nil {
-		log.Error("Fail to delete farm error: ", err)
-		return
-	}
+	log.Log.V(2).Infof("successfully updated farm: %s on provider %s", farm.FarmName(),provider.Name)
+	p.ProviderUpdateSuccessStatus(provider, "Normal", "FarmCreateSuccess", fmt.Sprintf("Farm %s-%s was updated on provider", farm.Namespace, farm.Name))
+	return farmIpAddress,nil
 }
 
-func (p *ProviderController) removeFarm(farm *managerv1alpha1.Farm) error {
+func (p *ProviderController) DeleteFarm(farm *managerv1alpha1.Farm) (error) {
 	provider, err := p.getProvider(farm)
 	if err != nil {
-		return nil
+		return err
 	}
-
 	err = grpcClient.RemoveFarm(provider.Spec.Url, farm)
 	if err != nil {
-		p.FarmUpdateFailDeleteStatus(farm, "Warning", "FarmDeleted", err.Error())
-		p.ProviderUpdateFailStatus(provider, "Warning", "FarmDeleted", fmt.Sprint("Fail to delete farm error: ", err))
+		log.Log.V(2).Errorf("Fail to remove farm: %s on provider %s error message: %s", farm.FarmName(),provider.Name,err.Error())
+		p.ProviderUpdateFailStatus(provider, "Warning", "FarmDeleteFail", err.Error())
 		return err
 	}
 
-	err = p.ReconcileProvider.Client.Delete(context.TODO(), farm)
-	if err != nil {
-		p.ProviderUpdateFailStatus(provider, "Warning", "FarmDeleted", fmt.Sprint("Fail to delete farm error: ", err))
-		return err
-	}
-
+	log.Log.V(2).Infof("successfully removed farm: %s on provider %s", farm.FarmName(),provider.Name)
+	p.ProviderUpdateSuccessStatus(provider, "Normal", "FarmDeleteSuccess", fmt.Sprintf("Farm %s-%s was deleted on provider", farm.Namespace, farm.Name))
 	return nil
 }
 
-func (p *ProviderController) UpdateNodes(nodes []string) {
+func (p *ProviderController) UpdateNodesList(nodes []string) {
 	p.ReconcileProvider.NodeList = nodes
-
-	providers := &managerv1alpha1.ProviderList{}
-	p.ReconcileProvider.Client.List(context.TODO(), &client.ListOptions{Namespace: managerv1alpha1.ControllerNamespace}, providers)
-
-	for _, provider := range providers.Items {
-		err := grpcClient.UpdateNodes(provider.Spec.Url, p.ReconcileProvider.NodeList)
-		if err != nil {
-			p.ProviderUpdateFailStatus(&provider, "Warning", "NodeUpdate", err.Error())
-		} else {
-			p.ProviderUpdateSuccessStatus(&provider, "Normal", "NodeUpdate", "Node list updated successfully")
-		}
-	}
 }
 
 
-func (p *ProviderController)updateProviderStatus(err error) {
 
-}
 
+
+
+
+//func (p *ProviderController) oldUpdateFarm(farm *managerv1alpha1.Farm) (string, error) {
+//	provider, err := p.getProvider(farm)
+//	if err != nil {
+//		return "", nil
+//	}
+//
+//	farmIpAddress, err := grpcClient.UpdateFarm(provider.Spec.Url, farm)
+//	if err != nil {
+//		p.ProviderUpdateFailStatus(provider, "Warning", "FarmUpdated", err.Error())
+//		p.FarmUpdateFailStatus(farm, "Warning", "FarmCreated", err.Error())
+//		return "", err
+//	}
+//	p.ProviderUpdateSuccessStatus(provider, "Normal", "FarmUpdated", fmt.Sprintf("Farm %s-%s updated on provider", farm.Namespace, farm.Name))
+//	p.FarmUpdateSuccessStatus(farm, farmIpAddress, "Normal", "FarmUpdated", fmt.Sprintf("Farm updated on provider %s", provider.Name))
+//
+//	farm.Status.NodeList = p.ReconcileProvider.NodeList
+//	p.ReconcileProvider.Client.Update(context.Background(), farm)
+//
+//	return farmIpAddress, nil
+//}
+
+//func (p *ProviderController) oldDeleteFarm(farmName string) {
+//	farmInstance, err := p.ReconcileProvider.farmController.GetFarm(farmName)
+//	if err != nil {
+//		log.Error("Fail to get farm error: ", err)
+//		return
+//	}
+//
+//	err = p.removeFarm(farmInstance)
+//	if err != nil {
+//		log.Error("Fail to delete farm error: ", err)
+//		return
+//	}
+//}
+//
+//func (p *ProviderController) removeFarm(farm *managerv1alpha1.Farm) error {
+//	provider, err := p.getProvider(farm)
+//	if err != nil {
+//		return nil
+//	}
+//
+//	err = grpcClient.RemoveFarm(provider.Spec.Url, farm)
+//	if err != nil {
+//		p.FarmUpdateFailDeleteStatus(farm, "Warning", "FarmDeleted", err.Error())
+//		p.ProviderUpdateFailStatus(provider, "Warning", "FarmDeleted", fmt.Sprint("Fail to delete farm error: ", err))
+//		return err
+//	}
+//
+//	err = p.ReconcileProvider.Client.Delete(context.TODO(), farm)
+//	if err != nil {
+//		p.ProviderUpdateFailStatus(provider, "Warning", "FarmDeleted", fmt.Sprint("Fail to delete farm error: ", err))
+//		return err
+//	}
+//
+//	return nil
+//}
+
+//
+//func (p *ProviderController)updateProviderStatus(err error) {
+//
+//}
+//
 
 
 func (p *ProviderController)updateLabels(provider *managerv1alpha1.Provider, status string) {

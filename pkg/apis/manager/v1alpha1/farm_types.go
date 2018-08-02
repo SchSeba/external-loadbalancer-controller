@@ -19,6 +19,7 @@ package v1alpha1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"fmt"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -64,4 +65,16 @@ type FarmList struct {
 
 func init() {
 	SchemeBuilder.Register(&Farm{}, &FarmList{})
+}
+
+func (f *Farm)FarmName() (string) {
+	return fmt.Sprintf("%s-%s",f.Namespace,f.Name)
+}
+
+func CreateFarmObject(service *corev1.Service,farmName,providerName string) *Farm {
+	return &Farm{ObjectMeta:metav1.ObjectMeta{Name:farmName},
+			Spec:FarmSpec{ServiceName:service.Name,
+			ServiceNamespace:service.Namespace,
+			Ports:service.Spec.Ports,
+			Provider:providerName}}
 }

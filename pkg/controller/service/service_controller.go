@@ -31,7 +31,6 @@ import (
 
 	managerv1alpha1 "github.com/k8s-external-lb/external-loadbalancer-controller/pkg/apis/manager/v1alpha1"
 
-	"fmt"
 	"github.com/cloudflare/cfssl/log"
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/farm"
 	"k8s.io/apimachinery/pkg/labels"
@@ -102,7 +101,7 @@ type ReconcileService struct {
 // Reconcile reads that state of the cluster for a Service object and makes changes based on the state read
 // and what is in the Service.Spec
 // +kubebuilder:rbac:groups=core,resources=services,verbs=create;get;list;watch;update;patch;delete
-// +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups=core,resources=events,verbs=create;update;delete;patch
 func (r *ReconcileService) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	// Fetch the Service instance
 	service := &corev1.Service{}
@@ -124,70 +123,12 @@ func (r *ReconcileService) Reconcile(request reconcile.Request) (reconcile.Resul
 
 	log.Infof("%+v", *service)
 
-	r.FarmController.CreateOrUpdateFarm(service)
-	return reconcile.Result{}, nil
-
-
-	farmInstance, isCreated, err := r.FarmController.GetOrCreateFarm(service)
-	if err != nil {
-		log.Errorf("Fail to get or create farm from service %s in namespace %s error: ", service.Name, service.Namespace, err)
-		if service.Labels == nil {
-			service.Labels = make(map[string]string)
-		}
-
-		if _, ok := service.Labels[managerv1alpha1.ServiceStatusLabel]; !ok {
-			service.Labels[managerv1alpha1.ServiceStatusLabel] = managerv1alpha1.ServiceStatusLabelFailed
-			err := r.Client.Update(context.Background(), service)
-			if err != nil {
-				log.Errorf("Fail to create label for service %s in namespace %s error: %s", service.Name, service.Namespace, err.Error())
-			}
-		}
-
-		return reconcile.Result{}, nil
-	}
-
-	serviceIpAddress := ""
-	err = nil
-
-	if isCreated {
-		serviceIpAddress, err = r.ProviderController.CreateFarm(farmInstance)
-	} else if r.FarmController.NeedToUpdate(farmInstance, service) {
-		serviceIpAddress, err = r.ProviderController.UpdateFarm(farmInstance)
-	}
-
-	if err != nil {
-		log.Errorf("Fail to create or update farm on provider for service %s in namespace %s", service.Name, service.Namespace)
-		return reconcile.Result{}, nil
-	}
-
-	if serviceIpAddress != "" {
-		r.updateServiceStatus(serviceIpAddress, service)
-	}
-
-	if service.Labels != nil {
-		if _, ok := service.Labels[managerv1alpha1.ServiceStatusLabel]; ok {
-			delete(service.Labels, managerv1alpha1.ServiceStatusLabel)
-			err := r.Client.Update(context.Background(), service)
-			if err != nil {
-				log.Errorf("Fail to remove label from service %s in namespace %s error: %s", service.Name, service.Namespace, err.Error())
-			}
-		}
+	if r.FarmController.CreateOrUpdateFarm(service) {
+		r.kubeClient.CoreV1().Services(service.Namespace).UpdateStatus(service)
 	}
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileService) updateServiceStatus(serviceIpAddress string, service *corev1.Service) error {
-	//service.Spec.ExternalIPs = []string{serviceIpAddress}
-
-	if service.Status.LoadBalancer.Ingress == nil {
-		service.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{}
-	}
-
-	service.Status.LoadBalancer.Ingress = append(service.Status.LoadBalancer.Ingress, corev1.LoadBalancerIngress{IP:serviceIpAddress})
-	_, err := r.kubeClient.CoreV1().Services(service.Namespace).UpdateStatus(service)
-
-	return err
-}
 
 func (r *ReconcileService) reSyncProcess() {
 	resyncTick := time.Tick(30 * time.Second)
