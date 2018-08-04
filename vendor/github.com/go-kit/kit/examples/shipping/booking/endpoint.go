@@ -1,11 +1,11 @@
 package booking
 
 import (
-	"context"
 	"time"
 
-	"github.com/go-kit/kit/endpoint"
+	"golang.org/x/net/context"
 
+	"github.com/go-kit/kit/endpoint"
 	"github.com/go-kit/kit/examples/shipping/cargo"
 	"github.com/go-kit/kit/examples/shipping/location"
 )
@@ -42,10 +42,10 @@ type loadCargoResponse struct {
 
 func (r loadCargoResponse) error() error { return r.Err }
 
-func makeLoadCargoEndpoint(s Service) endpoint.Endpoint {
+func makeLoadCargoEndpoint(bs Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
 		req := request.(loadCargoRequest)
-		c, err := s.LoadCargo(req.ID)
+		c, err := bs.LoadCargo(req.ID)
 		return loadCargoResponse{Cargo: &c, Err: err}, nil
 	}
 }

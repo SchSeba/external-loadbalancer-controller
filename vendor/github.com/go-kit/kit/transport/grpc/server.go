@@ -1,32 +1,29 @@
 package grpc
 
 import (
-	"context"
-
-	oldcontext "golang.org/x/net/context"
-	"google.golang.org/grpc"
+	"golang.org/x/net/context"
 	"google.golang.org/grpc/metadata"
 
 	"github.com/go-kit/kit/endpoint"
 	"github.com/go-kit/kit/log"
 )
 
-// Handler which should be called from the gRPC binding of the service
+// Handler which should be called from the grpc binding of the service
 // implementation. The incoming request parameter, and returned response
 // parameter, are both gRPC types, not user-domain.
 type Handler interface {
-	ServeGRPC(ctx oldcontext.Context, request interface{}) (oldcontext.Context, interface{}, error)
+	ServeGRPC(ctx context.Context, request interface{}) (context.Context, interface{}, error)
 }
 
 // Server wraps an endpoint and implements grpc.Handler.
 type Server struct {
-	e         endpoint.Endpoint
-	dec       DecodeRequestFunc
-	enc       EncodeResponseFunc
-	before    []ServerRequestFunc
-	after     []ServerResponseFunc
-	finalizer []ServerFinalizerFunc
-	logger    log.Logger
+	ctx    context.Context
+	e      endpoint.Endpoint
+	dec    DecodeRequestFunc
+	enc    EncodeResponseFunc
+	before []RequestFunc
+	after  []ResponseFunc
+	logger log.Logger
 }
 
 // NewServer constructs a new server, which implements wraps the provided
@@ -35,12 +32,14 @@ type Server struct {
 // definitions to individual handlers. Request and response objects are from the
 // caller business domain, not gRPC request and reply types.
 func NewServer(
+	ctx context.Context,
 	e endpoint.Endpoint,
 	dec DecodeRequestFunc,
 	enc EncodeResponseFunc,
 	options ...ServerOption,
 ) *Server {
 	s := &Server{
+		ctx:    ctx,
 		e:      e,
 		dec:    dec,
 		enc:    enc,
@@ -57,14 +56,14 @@ type ServerOption func(*Server)
 
 // ServerBefore functions are executed on the HTTP request object before the
 // request is decoded.
-func ServerBefore(before ...ServerRequestFunc) ServerOption {
-	return func(s *Server) { s.before = append(s.before, before...) }
+func ServerBefore(before ...RequestFunc) ServerOption {
+	return func(s *Server) { s.before = before }
 }
 
 // ServerAfter functions are executed on the HTTP response writer after the
 // endpoint is invoked, but before anything is written to the client.
-func ServerAfter(after ...ServerResponseFunc) ServerOption {
-	return func(s *Server) { s.after = append(s.after, after...) }
+func ServerAfter(after ...ResponseFunc) ServerOption {
+	return func(s *Server) { s.after = after }
 }
 
 // ServerErrorLogger is used to log non-terminal errors. By default, no errors
@@ -73,89 +72,57 @@ func ServerErrorLogger(logger log.Logger) ServerOption {
 	return func(s *Server) { s.logger = logger }
 }
 
-// ServerFinalizer is executed at the end of every gRPC request.
-// By default, no finalizer is registered.
-func ServerFinalizer(f ...ServerFinalizerFunc) ServerOption {
-	return func(s *Server) { s.finalizer = append(s.finalizer, f...) }
-}
-
 // ServeGRPC implements the Handler interface.
-func (s Server) ServeGRPC(ctx oldcontext.Context, req interface{}) (retctx oldcontext.Context, resp interface{}, err error) {
+func (s Server) ServeGRPC(grpcCtx context.Context, req interface{}) (context.Context, interface{}, error) {
+	ctx := s.ctx
+
 	// Retrieve gRPC metadata.
-	md, ok := metadata.FromIncomingContext(ctx)
+	md, ok := metadata.FromContext(grpcCtx)
 	if !ok {
 		md = metadata.MD{}
 	}
 
-	if len(s.finalizer) > 0 {
-		defer func() {
-			for _, f := range s.finalizer {
-				f(ctx, err)
-			}
-		}()
-	}
-
 	for _, f := range s.before {
-		ctx = f(ctx, md)
+		ctx = f(ctx, &md)
 	}
 
-	var (
-		request  interface{}
-		response interface{}
-		grpcResp interface{}
-	)
+	// Store potentially updated metadata in the gRPC context.
+	grpcCtx = metadata.NewContext(grpcCtx, md)
 
-	request, err = s.dec(ctx, req)
+	request, err := s.dec(grpcCtx, req)
 	if err != nil {
 		s.logger.Log("err", err)
-		return ctx, nil, err
+		return grpcCtx, nil, BadRequestError{err}
 	}
 
-	response, err = s.e(ctx, request)
+	response, err := s.e(ctx, request)
 	if err != nil {
 		s.logger.Log("err", err)
-		return ctx, nil, err
+		return grpcCtx, nil, err
 	}
 
-	var mdHeader, mdTrailer metadata.MD
 	for _, f := range s.after {
-		ctx = f(ctx, &mdHeader, &mdTrailer)
+		f(ctx, &md)
 	}
 
-	grpcResp, err = s.enc(ctx, response)
+	// Store potentially updated metadata in the gRPC context.
+	grpcCtx = metadata.NewContext(grpcCtx, md)
+
+	grpcResp, err := s.enc(grpcCtx, response)
 	if err != nil {
 		s.logger.Log("err", err)
-		return ctx, nil, err
+		return grpcCtx, nil, err
 	}
 
-	if len(mdHeader) > 0 {
-		if err = grpc.SendHeader(ctx, mdHeader); err != nil {
-			s.logger.Log("err", err)
-			return ctx, nil, err
-		}
-	}
-
-	if len(mdTrailer) > 0 {
-		if err = grpc.SetTrailer(ctx, mdTrailer); err != nil {
-			s.logger.Log("err", err)
-			return ctx, nil, err
-		}
-	}
-
-	return ctx, grpcResp, nil
+	return grpcCtx, grpcResp, nil
 }
 
-// ServerFinalizerFunc can be used to perform work at the end of an gRPC
-// request, after the response has been written to the client.
-type ServerFinalizerFunc func(ctx context.Context, err error)
+// BadRequestError is an error in decoding the request.
+type BadRequestError struct {
+	Err error
+}
 
-// Interceptor is a grpc UnaryInterceptor that injects the method name into
-// context so it can be consumed by Go kit gRPC middlewares. The Interceptor
-// typically is added at creation time of the grpc-go server.
-// Like this: `grpc.NewServer(grpc.UnaryInterceptor(kitgrpc.Interceptor))`
-func Interceptor(
-	ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
-) (resp interface{}, err error) {
-	ctx = context.WithValue(ctx, ContextKeyRequestMethod, info.FullMethod)
-	return handler(ctx, req)
+// Error implements the error interface.
+func (err BadRequestError) Error() string {
+	return err.Err.Error()
 }

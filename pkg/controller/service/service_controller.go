@@ -121,10 +121,13 @@ func (r *ReconcileService) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, nil
 	}
 
-	log.Infof("%+v", *service)
+	//log.Infof("%+v", *service)
 
 	if r.FarmController.CreateOrUpdateFarm(service) {
-		r.kubeClient.CoreV1().Services(service.Namespace).UpdateStatus(service)
+		_,err := r.kubeClient.CoreV1().Services(service.Namespace).UpdateStatus(service)
+		if err != nil {
+			log.Errorf("Fail to update service status error message: %s",err.Error())
+		}
 	}
 	return reconcile.Result{}, nil
 }

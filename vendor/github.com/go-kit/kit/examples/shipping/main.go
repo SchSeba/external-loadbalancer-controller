@@ -1,17 +1,17 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
 	stdprometheus "github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"golang.org/x/net/context"
 
 	"github.com/go-kit/kit/log"
 	kitprometheus "github.com/go-kit/kit/metrics/prometheus"
@@ -19,9 +19,9 @@ import (
 	"github.com/go-kit/kit/examples/shipping/booking"
 	"github.com/go-kit/kit/examples/shipping/cargo"
 	"github.com/go-kit/kit/examples/shipping/handling"
-	"github.com/go-kit/kit/examples/shipping/inmem"
 	"github.com/go-kit/kit/examples/shipping/inspection"
 	"github.com/go-kit/kit/examples/shipping/location"
+	"github.com/go-kit/kit/examples/shipping/repository"
 	"github.com/go-kit/kit/examples/shipping/routing"
 	"github.com/go-kit/kit/examples/shipping/tracking"
 )
@@ -45,14 +45,15 @@ func main() {
 	flag.Parse()
 
 	var logger log.Logger
-	logger = log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
-	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
+	logger = log.NewLogfmtLogger(os.Stderr)
+	logger = &serializedLogger{Logger: logger}
+	logger = log.NewContext(logger).With("ts", log.DefaultTimestampUTC)
 
 	var (
-		cargos         = inmem.NewCargoRepository()
-		locations      = inmem.NewLocationRepository()
-		voyages        = inmem.NewVoyageRepository()
-		handlingEvents = inmem.NewHandlingEventRepository()
+		cargos         = repository.NewCargo()
+		locations      = repository.NewLocation()
+		voyages        = repository.NewVoyage()
+		handlingEvents = repository.NewHandlingEvent()
 	)
 
 	// Configure some questionable dependencies.
@@ -73,11 +74,11 @@ func main() {
 	fieldKeys := []string{"method"}
 
 	var rs routing.Service
-	rs = routing.NewProxyingMiddleware(ctx, *routingServiceURL)(rs)
+	rs = routing.NewProxyingMiddleware(*routingServiceURL, ctx)(rs)
 
 	var bs booking.Service
 	bs = booking.NewService(cargos, locations, handlingEvents, rs)
-	bs = booking.NewLoggingService(log.With(logger, "component", "booking"), bs)
+	bs = booking.NewLoggingService(log.NewContext(logger).With("component", "booking"), bs)
 	bs = booking.NewInstrumentingService(
 		kitprometheus.NewCounterFrom(stdprometheus.CounterOpts{
 			Namespace: "api",
@@ -96,7 +97,7 @@ func main() {
 
 	var ts tracking.Service
 	ts = tracking.NewService(cargos, handlingEvents)
-	ts = tracking.NewLoggingService(log.With(logger, "component", "tracking"), ts)
+	ts = tracking.NewLoggingService(log.NewContext(logger).With("component", "tracking"), ts)
 	ts = tracking.NewInstrumentingService(
 		kitprometheus.NewCounterFrom(stdprometheus.CounterOpts{
 			Namespace: "api",
@@ -115,7 +116,7 @@ func main() {
 
 	var hs handling.Service
 	hs = handling.NewService(handlingEvents, handlingEventFactory, handlingEventHandler)
-	hs = handling.NewLoggingService(log.With(logger, "component", "handling"), hs)
+	hs = handling.NewLoggingService(log.NewContext(logger).With("component", "handling"), hs)
 	hs = handling.NewInstrumentingService(
 		kitprometheus.NewCounterFrom(stdprometheus.CounterOpts{
 			Namespace: "api",
@@ -132,16 +133,16 @@ func main() {
 		hs,
 	)
 
-	httpLogger := log.With(logger, "component", "http")
+	httpLogger := log.NewContext(logger).With("component", "http")
 
 	mux := http.NewServeMux()
 
-	mux.Handle("/booking/v1/", booking.MakeHandler(bs, httpLogger))
-	mux.Handle("/tracking/v1/", tracking.MakeHandler(ts, httpLogger))
-	mux.Handle("/handling/v1/", handling.MakeHandler(hs, httpLogger))
+	mux.Handle("/booking/v1/", booking.MakeHandler(ctx, bs, httpLogger))
+	mux.Handle("/tracking/v1/", tracking.MakeHandler(ctx, ts, httpLogger))
+	mux.Handle("/handling/v1/", handling.MakeHandler(ctx, hs, httpLogger))
 
 	http.Handle("/", accessControl(mux))
-	http.Handle("/metrics", promhttp.Handler())
+	http.Handle("/metrics", stdprometheus.Handler())
 
 	errs := make(chan error, 2)
 	go func() {
@@ -185,16 +186,23 @@ func storeTestData(r cargo.Repository) {
 		Destination:     location.SESTO,
 		ArrivalDeadline: time.Now().AddDate(0, 0, 7),
 	})
-	if err := r.Store(test1); err != nil {
-		panic(err)
-	}
+	_ = r.Store(test1)
 
 	test2 := cargo.New("ABC123", cargo.RouteSpecification{
 		Origin:          location.SESTO,
 		Destination:     location.CNHKG,
 		ArrivalDeadline: time.Now().AddDate(0, 0, 14),
 	})
-	if err := r.Store(test2); err != nil {
-		panic(err)
-	}
+	_ = r.Store(test2)
+}
+
+type serializedLogger struct {
+	mtx sync.Mutex
+	log.Logger
+}
+
+func (l *serializedLogger) Log(keyvals ...interface{}) error {
+	l.mtx.Lock()
+	defer l.mtx.Unlock()
+	return l.Logger.Log(keyvals...)
 }

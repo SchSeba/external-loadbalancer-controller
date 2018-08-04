@@ -15,6 +15,7 @@ message Data {
     string FarmName = 1;
     repeated Port Ports = 2;
     repeated string nodes = 3;
+    string Special = 4;
 }
 
 message Port {
@@ -29,5 +30,5 @@ message Result {
 }
 
 message Nodes {
-    repeated string list = 1;
+    repeated string List = 1;
 }

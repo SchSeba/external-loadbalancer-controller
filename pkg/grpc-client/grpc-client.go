@@ -32,18 +32,28 @@ import (
 	"context"
 )
 
-func getGrpcClient(url string) (pb.ExternalLoadBalancerClient, error) {
+type GrpcClientInterface interface {
+	CreateFarm(string, *v1alpha1.Farm) (string, error)
+	UpdateFarm(url string, farm *v1alpha1.Farm) (string, error)
+	RemoveFarm(url string, farm *v1alpha1.Farm) error
+}
+
+type GrpcClient struct {}
+
+var Grpc = GrpcClient{}
+
+func(g *GrpcClient) getGrpcClient(url string) (pb.ExternalLoadBalancerClient, error) {
 	conn, err := grpc.Dial(url, v1alpha1.GrpcDial)
 	if err != nil {
-		log.Log.Error(err)
+		log.Log.Error(err.Error())
 		return nil, err
 	}
 
 	return pb.NewExternalLoadBalancerClient(conn), nil
 }
 
-func CreateFarm(url string, farm *v1alpha1.Farm) (string, error) {
-	client, err := getGrpcClient(url)
+func (g *GrpcClient) CreateFarm(url string, farm *v1alpha1.Farm) (string, error) {
+	client, err := g.getGrpcClient(url)
 	if err != nil {
 		return "", err
 	}
@@ -58,8 +68,8 @@ func CreateFarm(url string, farm *v1alpha1.Farm) (string, error) {
 	return result.FarmAddress, err
 }
 
-func UpdateFarm(url string, farm *v1alpha1.Farm) (string, error) {
-	client, err := getGrpcClient(url)
+func(g *GrpcClient) UpdateFarm(url string, farm *v1alpha1.Farm) (string, error) {
+	client, err := g.getGrpcClient(url)
 	if err != nil {
 		return "", err
 	}
@@ -74,8 +84,8 @@ func UpdateFarm(url string, farm *v1alpha1.Farm) (string, error) {
 	return result.FarmAddress, err
 }
 
-func RemoveFarm(url string, farm *v1alpha1.Farm) error {
-	client, err := getGrpcClient(url)
+func(g *GrpcClient) RemoveFarm(url string, farm *v1alpha1.Farm) error {
+	client, err := g.getGrpcClient(url)
 	if err != nil {
 		return err
 	}
@@ -87,8 +97,8 @@ func RemoveFarm(url string, farm *v1alpha1.Farm) error {
 	return nil
 }
 
-func UpdateNodes(url string, nodes []string) error {
-	client, err := getGrpcClient(url)
+func (g *GrpcClient) UpdateNodes(url string, nodes []string) error {
+	client, err := g.getGrpcClient(url)
 	if err != nil {
 		return err
 	}

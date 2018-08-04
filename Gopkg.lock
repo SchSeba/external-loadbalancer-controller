@@ -37,8 +37,7 @@
 [[projects]]
   name = "github.com/go-kit/kit"
   packages = ["log"]
-  revision = "ca4112baa34cb55091301bdc13b1420a122b1b9e"
-  version = "v0.7.0"
+  revision = "fe6fe28ba0d54b39f27e79cddba4911b7e4fffc7"
 
 [[projects]]
   name = "github.com/go-logfmt/logfmt"
@@ -48,10 +47,7 @@
 
 [[projects]]
   name = "github.com/go-logr/logr"
-  packages = [
-    ".",
-    "testing"
-  ]
+  packages = ["."]
   revision = "9fb12b3b21c5415d16ac18dc5cd42c1cfdd40c4e"
 
 [[projects]]
@@ -151,8 +147,8 @@
 [[projects]]
   name = "github.com/imdario/mergo"
   packages = ["."]
-  revision = "9316a62528ac99aaecb4e47eadd6dc8aa6533d58"
-  version = "v0.3.5"
+  revision = "9f23e2d6bd2a77f959b2bf6acdbefd708a83a4a4"
+  version = "v0.3.6"
 
 [[projects]]
   name = "github.com/inconshreveable/mousetrap"
@@ -175,8 +171,11 @@
 [[projects]]
   branch = "master"
   name = "github.com/k8s-external-lb/Proto"
-  packages = ["."]
-  revision = "f0ceef26862261c750823995a107b98878d8e11b"
+  packages = [
+    ".",
+    "examples/go-grpc-server/pkg/server"
+  ]
+  revision = "b7bcc88dce6e6df6f03205765dda731fa3c8aac7"
 
 [[projects]]
   branch = "master"
@@ -401,7 +400,7 @@
   branch = "master"
   name = "google.golang.org/genproto"
   packages = ["googleapis/rpc/status"]
-  revision = "2a72893556e4d1f6c795a4c039314c9fa751eedb"
+  revision = "daca94659cb50e9f37c1b834680f2e46358f10b0"
 
 [[projects]]
   name = "google.golang.org/grpc"
@@ -419,7 +418,9 @@
     "internal",
     "internal/backoff",
     "internal/channelz",
+    "internal/envconfig",
     "internal/grpcrand",
+    "internal/transport",
     "keepalive",
     "metadata",
     "naming",
@@ -429,11 +430,10 @@
     "resolver/passthrough",
     "stats",
     "status",
-    "tap",
-    "transport"
+    "tap"
   ]
-  revision = "168a6198bcb0ef175f7dacec0b8691fc141dc9b8"
-  version = "v1.13.0"
+  revision = "32fb0ac620c32ba40a4626ddf94d90d12cce3455"
+  version = "v1.14.0"
 
 [[projects]]
   name = "gopkg.in/fsnotify.v1"
@@ -669,7 +669,7 @@
     "pkg/source",
     "pkg/source/internal"
   ]
-  revision = "f5b79b93f3aa7b978117f942f3cd67a91db12207"
+  revision = "d12eff37fd2a40edb220eaa91e1b1059bc62149f"
 
 [[projects]]
   branch = "master"
@@ -683,7 +683,7 @@
     "pkg/internal/codegen/parse",
     "pkg/util"
   ]
-  revision = "baf783301797f950d03f5e13933d1c8dbab7c090"
+  revision = "4642040bdc8d31340218c0b36ae6c3779caad0b4"
 
 [[projects]]
   name = "sigs.k8s.io/testing_frameworks"
@@ -696,6 +696,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "300fdbcf1507c67377a5d500621bc8930d161272fb5a659082e660a34f2d714d"
+  inputs-digest = "28488c1d26e028e16ee449e7fbf2c243463b4f153dd3ecfea4069adfc1a4ab76"
   solver-name = "gps-cdcl"
   solver-version = 1

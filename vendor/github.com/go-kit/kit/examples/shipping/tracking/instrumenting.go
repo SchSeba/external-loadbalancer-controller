@@ -13,10 +13,10 @@ type instrumentingService struct {
 }
 
 // NewInstrumentingService returns an instance of an instrumenting Service.
-func NewInstrumentingService(counter metrics.Counter, latency metrics.Histogram, s Service) Service {
+func NewInstrumentingService(requestCount metrics.Counter, requestLatency metrics.Histogram, s Service) Service {
 	return &instrumentingService{
-		requestCount:   counter,
-		requestLatency: latency,
+		requestCount:   requestCount,
+		requestLatency: requestLatency,
 		Service:        s,
 	}
 }

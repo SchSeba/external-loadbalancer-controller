@@ -30,7 +30,7 @@ func (c *Counter) With(labelValues ...string) metrics.Counter { return c }
 // Add implements Counter.
 func (c *Counter) Add(delta float64) { c.f.Add(delta) }
 
-// Gauge implements the gauge metric with an expvar float.
+// Gauge implements the gauge metric wtih an expvar float.
 // Label values are not supported.
 type Gauge struct {
 	f *expvar.Float
@@ -49,9 +49,6 @@ func (g *Gauge) With(labelValues ...string) metrics.Gauge { return g }
 
 // Set implements Gauge.
 func (g *Gauge) Set(value float64) { g.f.Set(value) }
-
-// Add implements metrics.Gauge.
-func (g *Gauge) Add(delta float64) { g.f.Add(delta) }
 
 // Histogram implements the histogram metric with a combination of the generic
 // Histogram object and several expvar Floats, one for each of the 50th, 90th,

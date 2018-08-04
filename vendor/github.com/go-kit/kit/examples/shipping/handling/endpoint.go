@@ -1,11 +1,11 @@
 package handling
 
 import (
-	"context"
 	"time"
 
-	"github.com/go-kit/kit/endpoint"
+	"golang.org/x/net/context"
 
+	"github.com/go-kit/kit/endpoint"
 	"github.com/go-kit/kit/examples/shipping/cargo"
 	"github.com/go-kit/kit/examples/shipping/location"
 	"github.com/go-kit/kit/examples/shipping/voyage"

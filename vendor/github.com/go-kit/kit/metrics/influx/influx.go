@@ -10,7 +10,6 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/metrics"
-	"github.com/go-kit/kit/metrics/generic"
 	"github.com/go-kit/kit/metrics/internal/lv"
 )
 
@@ -21,13 +20,14 @@ import (
 // one data point per flush, with a "count" field that reflects all adds since
 // the last flush. Gauges are modeled as a timeseries with one data point per
 // flush, with a "value" field that reflects the current state of the gauge.
-// Histograms are modeled as a timeseries with one data point per combination of tags,
-// with a set of quantile fields that reflects the p50, p90, p95 & p99.
+// Histograms are modeled as a timeseries with one data point per observation,
+// with a "value" field that reflects each observation; use e.g. the HISTOGRAM
+// aggregate function to compute histograms.
 //
-// Influx tags are attached to the Influx object, can be given to each
-// metric at construction and can be updated anytime via With function. Influx fields
-// are mapped to Go kit label values directly by this collector. Actual metric
-// values are provided as fields with specific names depending on the metric.
+// Influx tags are immutable, attached to the Influx object, and given to each
+// metric at construction. Influx fields are mapped to Go kit label values, and
+// may be mutated via With functions. Actual metric values are provided as
+// fields with specific names depending on the metric.
 //
 // All observations are collected in memory locally, and flushed on demand.
 type Influx struct {
@@ -66,7 +66,6 @@ func (in *Influx) NewGauge(name string) *Gauge {
 	return &Gauge{
 		name: name,
 		obs:  in.gauges.Observe,
-		add:  in.gauges.Add,
 	}
 }
 
@@ -109,10 +108,10 @@ func (in *Influx) WriteTo(w BatchPointsWriter) (err error) {
 	now := time.Now()
 
 	in.counters.Reset().Walk(func(name string, lvs lv.LabelValues, values []float64) bool {
-		tags := mergeTags(in.tags, lvs)
+		fields := fieldsFrom(lvs)
+		fields["count"] = sum(values)
 		var p *influxdb.Point
-		fields := map[string]interface{}{"count": sum(values)}
-		p, err = influxdb.NewPoint(name, tags, fields, now)
+		p, err = influxdb.NewPoint(name, in.tags, fields, now)
 		if err != nil {
 			return false
 		}
@@ -124,10 +123,10 @@ func (in *Influx) WriteTo(w BatchPointsWriter) (err error) {
 	}
 
 	in.gauges.Reset().Walk(func(name string, lvs lv.LabelValues, values []float64) bool {
-		tags := mergeTags(in.tags, lvs)
+		fields := fieldsFrom(lvs)
+		fields["value"] = last(values)
 		var p *influxdb.Point
-		fields := map[string]interface{}{"value": last(values)}
-		p, err = influxdb.NewPoint(name, tags, fields, now)
+		p, err = influxdb.NewPoint(name, in.tags, fields, now)
 		if err != nil {
 			return false
 		}
@@ -139,23 +138,16 @@ func (in *Influx) WriteTo(w BatchPointsWriter) (err error) {
 	}
 
 	in.histograms.Reset().Walk(func(name string, lvs lv.LabelValues, values []float64) bool {
-		histogram := generic.NewHistogram(name, 50)
-		tags := mergeTags(in.tags, lvs)
-		var p *influxdb.Point
-		for _, v := range values {
-			histogram.Observe(v)
+		fields := fieldsFrom(lvs)
+		ps := make([]*influxdb.Point, len(values))
+		for i, v := range values {
+			fields["value"] = v // overwrite each time
+			ps[i], err = influxdb.NewPoint(name, in.tags, fields, now)
+			if err != nil {
+				return false
+			}
 		}
-		fields := map[string]interface{}{
-			"p50": histogram.Quantile(0.50),
-			"p90": histogram.Quantile(0.90),
-			"p95": histogram.Quantile(0.95),
-			"p99": histogram.Quantile(0.99),
-		}
-		p, err = influxdb.NewPoint(name, tags, fields, now)
-		if err != nil {
-			return false
-		}
-		bp.AddPoint(p)
+		bp.AddPoints(ps)
 		return true
 	})
 	if err != nil {
@@ -165,18 +157,15 @@ func (in *Influx) WriteTo(w BatchPointsWriter) (err error) {
 	return w.Write(bp)
 }
 
-func mergeTags(tags map[string]string, labelValues []string) map[string]string {
+func fieldsFrom(labelValues []string) map[string]interface{} {
 	if len(labelValues)%2 != 0 {
-		panic("mergeTags received a labelValues with an odd number of strings")
+		panic("fieldsFrom received a labelValues with an odd number of strings")
 	}
-	ret := make(map[string]string, len(tags)+len(labelValues)/2)
-	for k, v := range tags {
-		ret[k] = v
-	}
+	fields := make(map[string]interface{}, len(labelValues)/2)
 	for i := 0; i < len(labelValues); i += 2 {
-		ret[labelValues[i]] = labelValues[i+1]
+		fields[labelValues[i]] = labelValues[i+1]
 	}
-	return ret
+	return fields
 }
 
 func sum(a []float64) float64 {
@@ -221,7 +210,6 @@ type Gauge struct {
 	name string
 	lvs  lv.LabelValues
 	obs  observeFunc
-	add  observeFunc
 }
 
 // With implements metrics.Gauge.
@@ -230,18 +218,12 @@ func (g *Gauge) With(labelValues ...string) metrics.Gauge {
 		name: g.name,
 		lvs:  g.lvs.With(labelValues...),
 		obs:  g.obs,
-		add:  g.add,
 	}
 }
 
 // Set implements metrics.Gauge.
 func (g *Gauge) Set(value float64) {
 	g.obs(g.name, g.lvs, value)
-}
-
-// Add implements metrics.Gauge.
-func (g *Gauge) Add(delta float64) {
-	g.add(g.name, g.lvs, delta)
 }
 
 // Histogram is an Influx histrogram. Observations are aggregated into a

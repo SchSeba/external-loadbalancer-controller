@@ -246,3 +246,7 @@ version="v1.4.7"
 [[constraint]]
   name = "github.com/golang/mock"
   version = "1.1.1"
+
+[[constraint]]
+  name = "github.com/go-kit/kit"
+  revision = "fe6fe28ba0d54b39f27e79cddba4911b7e4fffc7"

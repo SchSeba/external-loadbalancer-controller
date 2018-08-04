@@ -60,6 +60,9 @@ func NewFarmController(mgr manager.Manager, providerController *provider.Provide
 	}
 
 	farmController := &FarmController{Client: mgr.GetClient(), Controller: controllerInstance, providerController:providerController,ReconcileFarm: reconcileFarm,kubeClient:kubeClient}
+	go farmController.CleanRemovedServices()
+	go farmController.reSyncFailFarms()
+
 	return farmController, nil
 }
 
@@ -104,7 +107,7 @@ func (f *FarmController) CreateOrUpdateFarm(service *corev1.Service) (bool) {
 
 	err := f.Client.Get(context.TODO(), client.ObjectKey{Namespace: managerv1alpha1.ControllerNamespace, Name: farmName}, farm)
 	if err != nil {
-		if !errors.IsNotFound(err) {
+		if errors.IsNotFound(err) {
 			f.createFarm(service)
 			return true
 		}
@@ -122,8 +125,25 @@ func (f *FarmController) CreateOrUpdateFarm(service *corev1.Service) (bool) {
 		return true
 	}
 
+	return f.needToAddIngressIpFromFarm(service,farm)
+}
+
+func (f *FarmController) needToAddIngressIpFromFarm(service *corev1.Service,farm *managerv1alpha1.Farm) (bool) {
+	ingressList := []corev1.LoadBalancerIngress{}
+
+	for _,externalIP := range service.Spec.ExternalIPs {
+		ingressList = append(ingressList,corev1.LoadBalancerIngress{IP:externalIP})
+	}
+
+	ingressList = append(ingressList,corev1.LoadBalancerIngress{IP:farm.Status.IpAdress})
+
+	if !reflect.DeepEqual(ingressList,service.Status.LoadBalancer.Ingress) {
+		service.Status.LoadBalancer.Ingress = ingressList
+		return true
+	}
 	return false
 }
+
 
 func (f *FarmController) createFarm(service *corev1.Service) {
 	providerInstance, err := f.getProvider(service)
@@ -132,7 +152,7 @@ func (f *FarmController) createFarm(service *corev1.Service) {
 		f.markServiceStatusFail(service,"Fail to find a provider for the service")
 	}
 
-	farm := managerv1alpha1.CreateFarmObject(service,fmt.Sprintf("%s-%s-%s",service.Namespace,service.Name),providerInstance.Name)
+	farm := CreateFarmObject(service,fmt.Sprintf("%s-%s",service.Namespace,service.Name),providerInstance.Name)
 
 	farmIpAddress, err := f.providerController.CreateFarm(farm)
 	if err != nil {
@@ -176,7 +196,7 @@ func (f *FarmController) updateFarm(farm *managerv1alpha1.Farm, service *corev1.
 	if farm.Spec.Provider != providerInstance.Name {
 		err = f.providerController.DeleteFarm(farm)
 		if err != nil {
-			deletedProviderFarm := managerv1alpha1.CreateFarmObject(service,
+			deletedProviderFarm := CreateFarmObject(service,
 													 fmt.Sprintf("%s-%s-%s",service.Namespace,
 													    providerInstance.Name,
 													    service.Name),providerInstance.Name)
@@ -222,9 +242,9 @@ func (f *FarmController) updateFarm(farm *managerv1alpha1.Farm, service *corev1.
 	f.updateServiceIpAddress(service,farmIpAddress)
 }
 
-func (f *FarmController) DeleteFarm(serviceName,serviceNamespace string) {
+func (f *FarmController) DeleteFarm(serviceNamespace,serviceName string) {
 	farm := &managerv1alpha1.Farm{}
-	err := f.Client.Get(context.Background(),client.ObjectKey{Name:serviceName,Namespace:serviceNamespace},farm)
+	err := f.Client.Get(context.Background(),client.ObjectKey{Name:fmt.Sprintf("%s-%s",serviceNamespace,serviceName),Namespace:managerv1alpha1.ControllerNamespace},farm)
 	if err != nil {
 		log.Log.V(2).Errorf("Fail to find farm %s-%s for deletion",serviceName,serviceNamespace)
 		return
@@ -238,6 +258,13 @@ func (f *FarmController) DeleteFarm(serviceName,serviceNamespace string) {
 		if err != nil {
 			log.Log.V(2).Errorf("Fail to update delete label on farm %s",farm.Name)
 		}
+
+		return
+	}
+
+	err = f.Client.Delete(context.Background(),farm)
+	if err != nil {
+		log.Log.V(2).Errorf("Fail to delete farm %s",farm.Name)
 	}
 }
 
@@ -275,6 +302,7 @@ func (f *FarmController) FarmUpdateFailDeleteStatus(farm *managerv1alpha1.Farm, 
 func (f *FarmController) FarmUpdateSuccessStatus(farm *managerv1alpha1.Farm, ipAddress, eventType, reason, message string) {
 	f.ReconcileFarm.Event.Event(farm.DeepCopy(), eventType, reason, message)
 	f.updateLabels(farm,managerv1alpha1.FarmStatusLabelSynced)
+	farm.Status.IpAdress = ipAddress
 }
 
 func (f *FarmController) needToUpdate(farm *managerv1alpha1.Farm, service *corev1.Service) (bool, error) {
@@ -303,46 +331,69 @@ func (f *FarmController) needToUpdate(farm *managerv1alpha1.Farm, service *corev
 	return false, nil
 }
 
-//func (f *FarmController) reSyncProcess() {
-//	resyncTick := time.Tick(30 * time.Second)
-//
-//	for range resyncTick {
-//		var farmList managerv1alpha1.FarmList
-//
-//		// Sync farm need to be deleted
-//		labelSelector := labels.Set{}
-//		labelSelector[managerv1alpha1.FarmStatusLabel] = managerv1alpha1.FarmStatusLabelDeleted
-//		err := f.Client.List(context.TODO(), &client.ListOptions{LabelSelector: labelSelector.AsSelector()}, &farmList)
-//		if err != nil {
-//			log.Log.V(2).Error("reSyncProcess: Fail to get farm list")
-//		} else {
-//			for _, farmInstance := range farmList.Items {
-//				p.removeFarm(&farmInstance)
-//			}
-//		}
-//	}
-//}
-//
-//func (f *FarmController) CleanRemovedServices() {
-//	cleanTick := time.NewTimer(10 * time.Second)
-//
-//	for range cleanTick.C {
-//		var farmList = managerv1alpha1.FarmList{}
-//		err := f.Client.List(context.TODO(), nil, &farmList)
-//		if err != nil {
-//			log.Log.V(2).Error("CleanRemovedServices: Fail to get farm list")
-//		} else {
-//			service := &corev1.Service{}
-//			for _, farmInstance := range farmList.Items {
-//				err := f.Client.Get(context.Background(), client.ObjectKey{Name: farmInstance.Spec.ServiceName, Namespace: farmInstance.Spec.ServiceNamespace}, service)
-//				if err != nil && errors.IsNotFound(err) {
-//					f.removeFarm(&farmInstance)
-//				}
-//			}
-//		}
-//
-//	}
-//}
+func (f *FarmController) getServiceFromFarm(farmInstance *managerv1alpha1.Farm) (*corev1.Service, error) {
+	return f.kubeClient.CoreV1().Services(farmInstance.Spec.ServiceNamespace).Get(farmInstance.Spec.ServiceName,metav1.GetOptions{})
+}
+
+func (f *FarmController) serviceExist(farmInstance *managerv1alpha1.Farm) bool {
+	_, err :=f.getServiceFromFarm(farmInstance)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return false
+		}
+		log.Log.V(2).Errorf("fail to get service %s on namespace %s from farm with error message %s",farmInstance.Spec.ServiceNamespace,farmInstance.Spec.ServiceName,err.Error())
+	}
+
+	return true
+}
+
+func (f *FarmController) reSyncFailFarms() {
+	resyncTick := time.Tick(30 * time.Second)
+
+	for range resyncTick {
+		var farmList managerv1alpha1.FarmList
+
+		// Sync farm need to be deleted
+		labelSelector := labels.Set{}
+		labelSelector[managerv1alpha1.FarmStatusLabel] = managerv1alpha1.FarmStatusLabelDeleted
+		err := f.Client.List(context.TODO(), &client.ListOptions{LabelSelector: labelSelector.AsSelector()}, &farmList)
+		if err != nil {
+			log.Log.V(2).Error("reSyncProcess: Fail to get farm list")
+		} else {
+			for _, farmInstance := range farmList.Items {
+				if ! f.serviceExist(&farmInstance) {
+					f.DeleteFarm(farmInstance.Spec.ServiceNamespace,farmInstance.Spec.ServiceName)
+				} else {
+					service, err := f.getServiceFromFarm(&farmInstance)
+					if err != nil {
+						log.Log.V(2).Errorf("fail to get service %s on namespace %s from farm with error message %s",farmInstance.Spec.ServiceNamespace,farmInstance.Spec.ServiceName,err.Error())
+					}
+					f.updateFarm(&farmInstance,service)
+				}
+			}
+		}
+	}
+}
+
+func (f *FarmController) CleanRemovedServices() {
+	cleanTick := time.NewTimer(10 * time.Minute)
+
+	for range cleanTick.C {
+		var farmList = managerv1alpha1.FarmList{}
+		err := f.Client.List(context.TODO(), nil, &farmList)
+		if err != nil {
+			log.Log.V(2).Error("CleanRemovedServices: Fail to get farm list")
+		} else {
+			service := &corev1.Service{}
+			for _, farmInstance := range farmList.Items {
+				err := f.Client.Get(context.Background(), client.ObjectKey{Name: farmInstance.Spec.ServiceName, Namespace: farmInstance.Spec.ServiceNamespace}, service)
+				if err != nil && errors.IsNotFound(err) {
+					f.DeleteFarm(farmInstance.Spec.ServiceNamespace,farmInstance.Spec.ServiceName)
+				}
+			}
+		}
+	}
+}
 
 func (f *FarmController) getProvider(service *corev1.Service) (*managerv1alpha1.Provider, error) {
 	var providerInstance managerv1alpha1.Provider
@@ -406,6 +457,19 @@ func (r *ReconcileFarm) Reconcile(request reconcile.Request) (reconcile.Result, 
 		return reconcile.Result{}, err
 	}
 
-	log.Log.Infof("%+v", instance)
+	//log.Log.Infof("%+v", instance)
 	return reconcile.Result{}, nil
+}
+
+
+func CreateFarmObject(service *corev1.Service,farmName,providerName string) *managerv1alpha1.Farm {
+	return &managerv1alpha1.Farm{ObjectMeta:metav1.ObjectMeta{Name:farmName,Namespace:managerv1alpha1.ControllerNamespace},
+		Spec:managerv1alpha1.FarmSpec{ServiceName:service.Name,
+			ServiceNamespace:service.Namespace,
+			Ports:service.Spec.Ports,
+			Provider:providerName},Status:FarmDefaultStatus()}
+}
+
+func FarmDefaultStatus() (managerv1alpha1.FarmStatus) {
+	return managerv1alpha1.FarmStatus{NodeList:[]string{},IpAdress:"",LastUpdate:metav1.NewTime(time.Now()),ConnectionStatus:""}
 }

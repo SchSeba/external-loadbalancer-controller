@@ -1,6 +1,7 @@
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
+  creationTimestamp: null
   labels:
     controller-tools.k8s.io: "1.0"
   name: farms.manager.external-loadbalancer
@@ -21,6 +22,10 @@ spec:
           type: object
         spec:
           properties:
+            ports:
+              items:
+                type: object
+              type: array
             provider:
               type: string
             serviceName:
@@ -31,6 +36,7 @@ spec:
           - serviceName
           - serviceNamespace
           - provider
+          - ports
           type: object
         status:
           properties:
@@ -45,13 +51,5 @@ spec:
               items:
                 type: string
               type: array
-            serviceVersion:
-              type: string
-          required:
-          - ipAdress
-          - nodeList
-          - serviceVersion
-          - connectionStatus
-          - lastUpdate
           type: object
   version: v1alpha1

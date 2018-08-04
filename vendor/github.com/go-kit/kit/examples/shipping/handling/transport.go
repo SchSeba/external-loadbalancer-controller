@@ -1,23 +1,22 @@
 package handling
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"time"
 
 	"github.com/gorilla/mux"
-
-	kitlog "github.com/go-kit/kit/log"
-	kithttp "github.com/go-kit/kit/transport/http"
+	"golang.org/x/net/context"
 
 	"github.com/go-kit/kit/examples/shipping/cargo"
 	"github.com/go-kit/kit/examples/shipping/location"
 	"github.com/go-kit/kit/examples/shipping/voyage"
+	kitlog "github.com/go-kit/kit/log"
+	kithttp "github.com/go-kit/kit/transport/http"
 )
 
 // MakeHandler returns a handler for the handling service.
-func MakeHandler(hs Service, logger kitlog.Logger) http.Handler {
+func MakeHandler(ctx context.Context, hs Service, logger kitlog.Logger) http.Handler {
 	r := mux.NewRouter()
 
 	opts := []kithttp.ServerOption{
@@ -26,6 +25,7 @@ func MakeHandler(hs Service, logger kitlog.Logger) http.Handler {
 	}
 
 	registerIncidentHandler := kithttp.NewServer(
+		ctx,
 		makeRegisterIncidentEndpoint(hs),
 		decodeRegisterIncidentRequest,
 		encodeResponse,
@@ -85,7 +85,6 @@ type errorer interface {
 
 // encode errors from business-logic
 func encodeError(_ context.Context, err error, w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	switch err {
 	case cargo.ErrUnknown:
 		w.WriteHeader(http.StatusNotFound)
@@ -94,6 +93,7 @@ func encodeError(_ context.Context, err error, w http.ResponseWriter) {
 	default:
 		w.WriteHeader(http.StatusInternalServerError)
 	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"error": err.Error(),
 	})

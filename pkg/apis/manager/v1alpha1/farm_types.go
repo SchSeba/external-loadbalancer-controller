@@ -35,10 +35,10 @@ type FarmSpec struct {
 
 // FarmStatus defines the observed state of Farm
 type FarmStatus struct {
-	IpAdress         string      `json:"ipAdress"`
-	NodeList         []string    `json:"nodeList"`
-	ConnectionStatus string      `json:"connectionStatus"`
-	LastUpdate       metav1.Time `json:"lastUpdate"`
+	IpAdress         string      `json:"ipAdress,omitempty"`
+	NodeList         []string    `json:"nodeList,omitempty"`
+	ConnectionStatus string      `json:"connectionStatus,omitempty"`
+	LastUpdate       metav1.Time `json:"lastUpdate,omitempty"`
 }
 
 // +genclient
@@ -69,12 +69,4 @@ func init() {
 
 func (f *Farm)FarmName() (string) {
 	return fmt.Sprintf("%s-%s",f.Namespace,f.Name)
-}
-
-func CreateFarmObject(service *corev1.Service,farmName,providerName string) *Farm {
-	return &Farm{ObjectMeta:metav1.ObjectMeta{Name:farmName},
-			Spec:FarmSpec{ServiceName:service.Name,
-			ServiceNamespace:service.Namespace,
-			Ports:service.Spec.Ports,
-			Provider:providerName}}
 }

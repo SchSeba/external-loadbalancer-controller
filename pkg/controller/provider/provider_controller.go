@@ -22,7 +22,7 @@ import (
 	"time"
 
 	managerv1alpha1 "github.com/k8s-external-lb/external-loadbalancer-controller/pkg/apis/manager/v1alpha1"
-	grpcClient "github.com/k8s-external-lb/external-loadbalancer-controller/pkg/grpc-client"
+	. "github.com/k8s-external-lb/external-loadbalancer-controller/pkg/grpc-client"
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/log"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -109,7 +109,7 @@ func (p *ProviderController) CreateFarm(farm *managerv1alpha1.Farm) (string, err
 	}
 
 	farm.Status.NodeList = p.ReconcileProvider.NodeList
-	farmIpAddress, err := grpcClient.CreateFarm(provider.Spec.Url, farm)
+	farmIpAddress, err := Grpc.CreateFarm(provider.Spec.Url, farm)
 
 	if err != nil {
 		log.Log.V(2).Errorf("Fail to create farm: %s on provider %s error message: %s", farm.FarmName(),provider.Name,err.Error())
@@ -129,7 +129,7 @@ func (p *ProviderController) UpdateFarm(farm *managerv1alpha1.Farm) (string,erro
 	}
 
 	farm.Status.NodeList = p.ReconcileProvider.NodeList
-	farmIpAddress, err := grpcClient.UpdateFarm(provider.Spec.Url, farm)
+	farmIpAddress, err := Grpc.UpdateFarm(provider.Spec.Url, farm)
 	if err != nil {
 		log.Log.V(2).Errorf("Fail to update farm: %s on provider %s error message: %s", farm.FarmName(),provider.Name,err.Error())
 		p.ProviderUpdateFailStatus(provider, "Warning", "FarmUpdateFail", err.Error())
@@ -146,7 +146,7 @@ func (p *ProviderController) DeleteFarm(farm *managerv1alpha1.Farm) (error) {
 	if err != nil {
 		return err
 	}
-	err = grpcClient.RemoveFarm(provider.Spec.Url, farm)
+	err = Grpc.RemoveFarm(provider.Spec.Url, farm)
 	if err != nil {
 		log.Log.V(2).Errorf("Fail to remove farm: %s on provider %s error message: %s", farm.FarmName(),provider.Name,err.Error())
 		p.ProviderUpdateFailStatus(provider, "Warning", "FarmDeleteFail", err.Error())
@@ -281,6 +281,6 @@ func (r *ReconcileProvider) Reconcile(request reconcile.Request) (reconcile.Resu
 		return reconcile.Result{}, err
 	}
 
-	fmt.Printf("%+v\n", instance)
+	//fmt.Printf("%+v\n", instance)
 	return reconcile.Result{}, nil
 }

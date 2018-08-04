@@ -1,0 +1,16 @@
+# Build the manager binary
+FROM golang:1.10.3 as builder
+
+# Copy in the go src
+WORKDIR /go/src/github.com/k8s-external-lb/Proto
+COPY . ./
+
+# Build
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o grpc-server github.com/k8s-external-lb/Proto/examples/go-grpc-server
+
+# Copy the grpc-server example into a thin image
+FROM centos:latest
+WORKDIR /root/
+COPY --from=builder /go/src/github.com/k8s-external-lb/Proto/grpc-server .
+RUN chmod +x ./grpc-server
+ENTRYPOINT ["./grpc-server"]

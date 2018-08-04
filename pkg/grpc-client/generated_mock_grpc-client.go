@@ -6,4 +6,67 @@ package grpc_client
 
 import (
 	gomock "github.com/golang/mock/gomock"
+	v1alpha1 "github.com/k8s-external-lb/external-loadbalancer-controller/pkg/apis/manager/v1alpha1"
+	reflect "reflect"
 )
+
+// MockGrpcClientInterface is a mock of GrpcClientInterface interface
+type MockGrpcClientInterface struct {
+	ctrl     *gomock.Controller
+	recorder *MockGrpcClientInterfaceMockRecorder
+}
+
+// MockGrpcClientInterfaceMockRecorder is the mock recorder for MockGrpcClientInterface
+type MockGrpcClientInterfaceMockRecorder struct {
+	mock *MockGrpcClientInterface
+}
+
+// NewMockGrpcClientInterface creates a new mock instance
+func NewMockGrpcClientInterface(ctrl *gomock.Controller) *MockGrpcClientInterface {
+	mock := &MockGrpcClientInterface{ctrl: ctrl}
+	mock.recorder = &MockGrpcClientInterfaceMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use
+func (m *MockGrpcClientInterface) EXPECT() *MockGrpcClientInterfaceMockRecorder {
+	return m.recorder
+}
+
+// CreateFarm mocks base method
+func (m *MockGrpcClientInterface) CreateFarm(arg0 string, arg1 *v1alpha1.Farm) (string, error) {
+	ret := m.ctrl.Call(m, "CreateFarm", arg0, arg1)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateFarm indicates an expected call of CreateFarm
+func (mr *MockGrpcClientInterfaceMockRecorder) CreateFarm(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateFarm", reflect.TypeOf((*MockGrpcClientInterface)(nil).CreateFarm), arg0, arg1)
+}
+
+// UpdateFarm mocks base method
+func (m *MockGrpcClientInterface) UpdateFarm(url string, farm *v1alpha1.Farm) (string, error) {
+	ret := m.ctrl.Call(m, "UpdateFarm", url, farm)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateFarm indicates an expected call of UpdateFarm
+func (mr *MockGrpcClientInterfaceMockRecorder) UpdateFarm(url, farm interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateFarm", reflect.TypeOf((*MockGrpcClientInterface)(nil).UpdateFarm), url, farm)
+}
+
+// RemoveFarm mocks base method
+func (m *MockGrpcClientInterface) RemoveFarm(url string, farm *v1alpha1.Farm) error {
+	ret := m.ctrl.Call(m, "RemoveFarm", url, farm)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RemoveFarm indicates an expected call of RemoveFarm
+func (mr *MockGrpcClientInterfaceMockRecorder) RemoveFarm(url, farm interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveFarm", reflect.TypeOf((*MockGrpcClientInterface)(nil).RemoveFarm), url, farm)
+}

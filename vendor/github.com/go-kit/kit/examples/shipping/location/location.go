@@ -1,9 +1,7 @@
 // Package location provides the Location aggregate.
 package location
 
-import (
-	"errors"
-)
+import "errors"
 
 // UNLocode is the United Nations location code that uniquely identifies a
 // particular location.
@@ -24,6 +22,6 @@ var ErrUnknown = errors.New("unknown location")
 
 // Repository provides access a location store.
 type Repository interface {
-	Find(locode UNLocode) (*Location, error)
-	FindAll() []*Location
+	Find(locode UNLocode) (Location, error)
+	FindAll() []Location
 }
