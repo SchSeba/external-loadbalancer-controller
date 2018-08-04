@@ -16,7 +16,7 @@ script:
 
 deploy:
 - provider: script
-  script: $DOCKER_LOGIN && make docker-push
+  script: docker login -u="$DOCKER_USER" -p="$DOCKER_PASS" quay.io && make publish
   skip_cleanup: true
   on:
     branch: master

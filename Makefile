@@ -60,6 +60,11 @@ docker-build: docker-test
 # Push the docker image
 docker-push: docker-build
 	docker push ${IMG}
+
+publish:
+	docker build . -t ${IMG}
+	docker push ${IMG}
+
 oc-cluster-up:
 	oc cluster up --base-dir=/opt/openshift/
 
