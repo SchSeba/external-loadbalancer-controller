@@ -13,3 +13,10 @@ install:
 
 script:
 - make docker-test
+
+deploy:
+- provider: script
+  script: $DOCKER_LOGIN && make docker-push
+  skip_cleanup: true
+  on:
+    branch: master
