@@ -182,6 +182,9 @@ func (f *FarmController) createFarm(service *corev1.Service) {
 
 func (f *FarmController) markServiceStatusFail(service *corev1.Service, message string) {
 	f.ReconcileFarm.Event.Event(service.DeepCopyObject(), "Warning", "FarmCreatedFail", message)
+	if service.Labels == nil {
+		service.Labels = make(map[string]string)
+	}
 	service.Labels[managerv1alpha1.ServiceStatusLabel] = managerv1alpha1.ServiceStatusLabelFailed
 }
 

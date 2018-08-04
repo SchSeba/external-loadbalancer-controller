@@ -1,0 +1,15 @@
+language: generic
+sudo: required
+dist: trusty
+
+services:
+- docker
+
+env:
+- BUILDER_NAME="external-lb/${TRAVIS_JOB_ID}builder"
+
+install:
+ - git reset --hard
+
+script:
+- make docker-test
