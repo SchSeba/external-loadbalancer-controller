@@ -33,9 +33,8 @@ type ProviderSpec struct {
 // ProviderStatus defines the observed state of Provider
 // +k8s:openapi-gen=true
 type ProviderStatus struct {
-	ConnectionStatus string      `json:"connectionStatus"`
-	LastUpdate       metav1.Time `json:"lastUpdate"`
-	Farms            FarmList
+	ConnectionStatus string      `json:"connectionStatus,omitempty"`
+	LastUpdate       metav1.Time `json:"lastUpdate.omitempty"`
 }
 
 // +genclient

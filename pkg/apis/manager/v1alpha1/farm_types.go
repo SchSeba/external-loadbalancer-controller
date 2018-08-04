@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"fmt"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -26,19 +27,18 @@ import (
 
 // FarmSpec defines the desired state of Farm
 type FarmSpec struct {
-	ServiceName      string `json:"serviceName"`
-	ServiceNamespace string `json:"serviceNamespace"`
-	Provider         string `json:"provider"`
-	Ports            []corev1.ServicePort
+	ServiceName      string               `json:"serviceName"`
+	ServiceNamespace string               `json:"serviceNamespace"`
+	Provider         string               `json:"provider"`
+	Ports            []corev1.ServicePort `json:"ports"`
 }
 
 // FarmStatus defines the observed state of Farm
 type FarmStatus struct {
-	IpAdress         string      `json:"ipAdress"`
-	NodeList         []string    `json:"nodeList"`
-	ServiceVersion   string      `json:"serviceVersion"`
-	ConnectionStatus string      `json:"connectionStatus"`
-	LastUpdate       metav1.Time `json:"lastUpdate"`
+	IpAdress         string      `json:"ipAdress,omitempty"`
+	NodeList         []string    `json:"nodeList,omitempty"`
+	ConnectionStatus string      `json:"connectionStatus,omitempty"`
+	LastUpdate       metav1.Time `json:"lastUpdate,omitempty"`
 }
 
 // +genclient
@@ -65,4 +65,8 @@ type FarmList struct {
 
 func init() {
 	SchemeBuilder.Register(&Farm{}, &FarmList{})
+}
+
+func (f *Farm) FarmName() string {
+	return fmt.Sprintf("%s-%s", f.Namespace, f.Name)
 }

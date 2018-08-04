@@ -22,6 +22,10 @@ spec:
           type: object
         spec:
           properties:
+            ports:
+              items:
+                type: object
+              type: array
             provider:
               type: string
             serviceName:
@@ -32,6 +36,7 @@ spec:
           - serviceName
           - serviceNamespace
           - provider
+          - ports
           type: object
         status:
           properties:
@@ -46,14 +51,5 @@ spec:
               items:
                 type: string
               type: array
-            serviceVersion:
-              type: string
-          required:
-          - ipAdress
-          - nodeList
-          - serviceVersion
-          - connectionStatus
-          - lastUpdate
           type: object
-      type: object
   version: v1alpha1

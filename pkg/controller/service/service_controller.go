@@ -30,9 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	managerv1alpha1 "github.com/k8s-external-lb/external-loadbalancer-controller/pkg/apis/manager/v1alpha1"
-	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/provider"
 
-	"fmt"
 	"github.com/cloudflare/cfssl/log"
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/farm"
 	"k8s.io/apimachinery/pkg/labels"
@@ -47,8 +45,8 @@ type ServiceController struct {
 	ReconcileService reconcile.Reconciler
 }
 
-func NewServiceController(mgr manager.Manager, kubeClient *kubernetes.Clientset, providerController *provider.ProviderController, farmController *farm.FarmController) (*ServiceController, error) {
-	reconcileService := newReconciler(mgr, kubeClient, providerController, farmController)
+func NewServiceController(mgr manager.Manager, kubeClient *kubernetes.Clientset, farmController *farm.FarmController) (*ServiceController, error) {
+	reconcileService := newReconciler(mgr, kubeClient, farmController)
 
 	controllerInstance, err := newController(mgr, reconcileService)
 	if err != nil {
@@ -64,13 +62,12 @@ func NewServiceController(mgr manager.Manager, kubeClient *kubernetes.Clientset,
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, kubeClient *kubernetes.Clientset, ProviderController *provider.ProviderController, farmController *farm.FarmController) *ReconcileService {
+func newReconciler(mgr manager.Manager, kubeClient *kubernetes.Clientset, farmController *farm.FarmController) *ReconcileService {
 	return &ReconcileService{Client: mgr.GetClient(),
-		kubeClient:         kubeClient,
-		scheme:             mgr.GetScheme(),
-		Event:              mgr.GetRecorder(managerv1alpha1.EventRecorderName),
-		ProviderController: ProviderController,
-		FarmController:     farmController}
+		kubeClient:     kubeClient,
+		scheme:         mgr.GetScheme(),
+		Event:          mgr.GetRecorder(managerv1alpha1.EventRecorderName),
+		FarmController: farmController}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -95,24 +92,23 @@ var _ reconcile.Reconciler = &ReconcileService{}
 // ReconcileService reconciles a Service object
 type ReconcileService struct {
 	client.Client
-	kubeClient         *kubernetes.Clientset
-	Event              record.EventRecorder
-	ProviderController *provider.ProviderController
-	FarmController     *farm.FarmController
-	scheme             *runtime.Scheme
+	kubeClient     *kubernetes.Clientset
+	Event          record.EventRecorder
+	FarmController *farm.FarmController
+	scheme         *runtime.Scheme
 }
 
 // Reconcile reads that state of the cluster for a Service object and makes changes based on the state read
 // and what is in the Service.Spec
 // +kubebuilder:rbac:groups=core,resources=services,verbs=create;get;list;watch;update;patch;delete
-// +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups=core,resources=events,verbs=create;update;delete;patch
 func (r *ReconcileService) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	// Fetch the Service instance
 	service := &corev1.Service{}
 	err := r.Get(context.TODO(), request.NamespacedName, service)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			r.ProviderController.DeleteFarm(fmt.Sprintf("%s-%s", request.Namespace, request.Name))
+			r.FarmController.DeleteFarm(request.Namespace, request.Name)
 			// Object not found, return.  Created objects are automatically garbage collected.
 			// For additional cleanup logic use finalizers.
 			return reconcile.Result{}, nil
@@ -125,69 +121,15 @@ func (r *ReconcileService) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, nil
 	}
 
-	log.Infof("%+v", *service)
+	//log.Infof("%+v", *service)
 
-	farmInstance, isCreated, err := r.FarmController.GetOrCreateFarm(service)
-	if err != nil {
-		log.Errorf("Fail to get or create farm from service %s in namespace %s error: ", service.Name, service.Namespace, err)
-		if service.Labels == nil {
-			service.Labels = make(map[string]string)
-		}
-
-		if _, ok := service.Labels[managerv1alpha1.ServiceStatusLabel]; !ok {
-			service.Labels[managerv1alpha1.ServiceStatusLabel] = managerv1alpha1.ServiceStatusLabelFailed
-			err := r.Client.Update(context.Background(), service)
-			if err != nil {
-				log.Errorf("Fail to create label for service %s in namespace %s error: %s", service.Name, service.Namespace, err.Error())
-			}
-		}
-
-		return reconcile.Result{}, nil
-	}
-
-	serviceIpAddress := ""
-	err = nil
-
-	if isCreated {
-		serviceIpAddress, err = r.ProviderController.CreateFarm(farmInstance)
-	} else if r.FarmController.NeedToUpdate(farmInstance, service) {
-		serviceIpAddress, err = r.ProviderController.UpdateFarm(farmInstance)
-	}
-
-	if err != nil {
-		log.Errorf("Fail to create or update farm on provider for service %s in namespace %s", service.Name, service.Namespace)
-		return reconcile.Result{}, nil
-	}
-
-	if serviceIpAddress != "" {
-		r.updateServiceStatus(serviceIpAddress, service)
-	}
-
-	if service.Labels != nil {
-		if _, ok := service.Labels[managerv1alpha1.ServiceStatusLabel]; ok {
-			delete(service.Labels, managerv1alpha1.ServiceStatusLabel)
-			err := r.Client.Update(context.Background(), service)
-			if err != nil {
-				log.Errorf("Fail to remove label from service %s in namespace %s error: %s", service.Name, service.Namespace, err.Error())
-			}
+	if r.FarmController.CreateOrUpdateFarm(service) {
+		_, err := r.kubeClient.CoreV1().Services(service.Namespace).UpdateStatus(service)
+		if err != nil {
+			log.Errorf("Fail to update service status error message: %s", err.Error())
 		}
 	}
 	return reconcile.Result{}, nil
-}
-
-func (r *ReconcileService) updateServiceStatus(serviceIpAddress string, service *corev1.Service) error {
-	service.Status = corev1.ServiceStatus{
-		LoadBalancer: corev1.LoadBalancerStatus{
-			Ingress: []corev1.LoadBalancerIngress{
-				{
-					IP: serviceIpAddress,
-				},
-			},
-		}}
-
-	_, err := r.kubeClient.CoreV1().Services(service.Namespace).UpdateStatus(service)
-
-	return err
 }
 
 func (r *ReconcileService) reSyncProcess() {

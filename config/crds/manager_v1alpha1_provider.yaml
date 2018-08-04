@@ -33,14 +33,5 @@ spec:
           properties:
             connectionStatus:
               type: string
-            lastUpdate:
-              format: date-time
-              type: string
-          required:
-          - connectionStatus
-          - lastUpdate
           type: object
-      required:
-      - spec
-      type: object
   version: v1alpha1

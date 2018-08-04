@@ -16,29 +16,44 @@ limitations under the License.
 
 package grpc_client
 
+//go:generate mockgen -source $GOFILE -package=$GOPACKAGE -destination=generated_mock_$GOFILE
+
+/*
+ ATTENTION: Rerun code generators when interface signatures are modified.
+*/
+
 import (
 	pb "github.com/k8s-external-lb/Proto"
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/apis/manager/v1alpha1"
-
-	"github.com/cloudflare/cfssl/log"
+	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/log"
 
 	"google.golang.org/grpc"
 
 	"context"
 )
 
-func getGrpcClient(url string) (pb.ExternalLoadBalancerClient, error) {
+type GrpcClientInterface interface {
+	CreateFarm(string, *v1alpha1.Farm) (string, error)
+	UpdateFarm(url string, farm *v1alpha1.Farm) (string, error)
+	RemoveFarm(url string, farm *v1alpha1.Farm) error
+}
+
+type GrpcClient struct{}
+
+var Grpc = GrpcClient{}
+
+func (g *GrpcClient) getGrpcClient(url string) (pb.ExternalLoadBalancerClient, error) {
 	conn, err := grpc.Dial(url, v1alpha1.GrpcDial)
 	if err != nil {
-		log.Error(err)
+		log.Log.Error(err.Error())
 		return nil, err
 	}
 
 	return pb.NewExternalLoadBalancerClient(conn), nil
 }
 
-func CreateFarm(url string, farm *v1alpha1.Farm, nodes []string) (string, error) {
-	client, err := getGrpcClient(url)
+func (g *GrpcClient) CreateFarm(url string, farm *v1alpha1.Farm) (string, error) {
+	client, err := g.getGrpcClient(url)
 	if err != nil {
 		return "", err
 	}
@@ -46,12 +61,15 @@ func CreateFarm(url string, farm *v1alpha1.Farm, nodes []string) (string, error)
 	ctx, cancel := context.WithTimeout(context.Background(), v1alpha1.GrpcTimeout)
 	defer cancel()
 
-	result, err := client.Create(ctx, &pb.Data{Nodes: nodes, Ports: createFarmPorts(farm)})
+	result, err := client.Create(ctx, &pb.Data{Nodes: farm.Status.NodeList, Ports: createFarmPorts(farm)})
+	if err != nil {
+		return "", err
+	}
 	return result.FarmAddress, err
 }
 
-func UpdateFarm(url string, farm *v1alpha1.Farm) (string, error) {
-	client, err := getGrpcClient(url)
+func (g *GrpcClient) UpdateFarm(url string, farm *v1alpha1.Farm) (string, error) {
+	client, err := g.getGrpcClient(url)
 	if err != nil {
 		return "", err
 	}
@@ -60,11 +78,14 @@ func UpdateFarm(url string, farm *v1alpha1.Farm) (string, error) {
 	defer cancel()
 
 	result, err := client.Update(ctx, &pb.Data{Nodes: []string{}, Ports: createFarmPorts(farm)})
+	if err != nil {
+		return "", err
+	}
 	return result.FarmAddress, err
 }
 
-func RemoveFarm(url string, farm *v1alpha1.Farm) error {
-	client, err := getGrpcClient(url)
+func (g *GrpcClient) RemoveFarm(url string, farm *v1alpha1.Farm) error {
+	client, err := g.getGrpcClient(url)
 	if err != nil {
 		return err
 	}
@@ -76,8 +97,8 @@ func RemoveFarm(url string, farm *v1alpha1.Farm) error {
 	return nil
 }
 
-func UpdateNodes(url string, nodes []string) error {
-	client, err := getGrpcClient(url)
+func (g *GrpcClient) UpdateNodes(url string, nodes []string) error {
+	client, err := g.getGrpcClient(url)
 	if err != nil {
 		return err
 	}

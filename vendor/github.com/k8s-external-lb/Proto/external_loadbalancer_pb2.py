@@ -19,7 +19,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   name='external-loadbalancer.proto',
   package='grpc',
   syntax='proto3',
-  serialized_pb=_b('\n\x1b\x65xternal-loadbalancer.proto\x12\x04grpc\"B\n\x04\x44\x61ta\x12\x10\n\x08\x46\x61rmName\x18\x01 \x01(\t\x12\x19\n\x05Ports\x18\x02 \x03(\x0b\x32\n.grpc.Port\x12\r\n\x05nodes\x18\x03 \x03(\t\"F\n\x04Port\x12\x0c\n\x04Name\x18\x01 \x01(\t\x12\x0c\n\x04Port\x18\x02 \x01(\x05\x12\x10\n\x08NodePort\x18\x03 \x01(\x05\x12\x10\n\x08Protocol\x18\x04 \x01(\t\"\x1d\n\x06Result\x12\x13\n\x0b\x46\x61rmAddress\x18\x01 \x01(\t\"\x15\n\x05Nodes\x12\x0c\n\x04list\x18\x01 \x03(\t2\xb4\x01\n\x14\x45xternalLoadBalancer\x12$\n\x06\x43reate\x12\n.grpc.Data\x1a\x0c.grpc.Result\"\x00\x12$\n\x06Update\x12\n.grpc.Data\x1a\x0c.grpc.Result\"\x00\x12$\n\x06\x44\x65lete\x12\n.grpc.Data\x1a\x0c.grpc.Result\"\x00\x12*\n\x0bNodesChange\x12\x0b.grpc.Nodes\x1a\x0c.grpc.Result\"\x00\x62\x06proto3')
+  serialized_pb=_b('\n\x1b\x65xternal-loadbalancer.proto\x12\x04grpc\"S\n\x04\x44\x61ta\x12\x10\n\x08\x46\x61rmName\x18\x01 \x01(\t\x12\x19\n\x05Ports\x18\x02 \x03(\x0b\x32\n.grpc.Port\x12\r\n\x05nodes\x18\x03 \x03(\t\x12\x0f\n\x07Special\x18\x04 \x01(\t\"F\n\x04Port\x12\x0c\n\x04Name\x18\x01 \x01(\t\x12\x0c\n\x04Port\x18\x02 \x01(\x05\x12\x10\n\x08NodePort\x18\x03 \x01(\x05\x12\x10\n\x08Protocol\x18\x04 \x01(\t\"\x1d\n\x06Result\x12\x13\n\x0b\x46\x61rmAddress\x18\x01 \x01(\t\"\x15\n\x05Nodes\x12\x0c\n\x04List\x18\x01 \x03(\t2\xb4\x01\n\x14\x45xternalLoadBalancer\x12$\n\x06\x43reate\x12\n.grpc.Data\x1a\x0c.grpc.Result\"\x00\x12$\n\x06Update\x12\n.grpc.Data\x1a\x0c.grpc.Result\"\x00\x12$\n\x06\x44\x65lete\x12\n.grpc.Data\x1a\x0c.grpc.Result\"\x00\x12*\n\x0bNodesChange\x12\x0b.grpc.Nodes\x1a\x0c.grpc.Result\"\x00\x62\x06proto3')
 )
 
 
@@ -53,6 +53,13 @@ _DATA = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='Special', full_name='grpc.Data.Special', index=3,
+      number=4, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None, file=DESCRIPTOR),
   ],
   extensions=[
   ],
@@ -66,7 +73,7 @@ _DATA = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=37,
-  serialized_end=103,
+  serialized_end=120,
 )
 
 
@@ -117,8 +124,8 @@ _PORT = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=105,
-  serialized_end=175,
+  serialized_start=122,
+  serialized_end=192,
 )
 
 
@@ -148,8 +155,8 @@ _RESULT = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=177,
-  serialized_end=206,
+  serialized_start=194,
+  serialized_end=223,
 )
 
 
@@ -161,7 +168,7 @@ _NODES = _descriptor.Descriptor(
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='list', full_name='grpc.Nodes.list', index=0,
+      name='List', full_name='grpc.Nodes.List', index=0,
       number=1, type=9, cpp_type=9, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
@@ -179,8 +186,8 @@ _NODES = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=208,
-  serialized_end=229,
+  serialized_start=225,
+  serialized_end=246,
 )
 
 _DATA.fields_by_name['Ports'].message_type = _PORT
@@ -226,8 +233,8 @@ _EXTERNALLOADBALANCER = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=0,
   options=None,
-  serialized_start=232,
-  serialized_end=412,
+  serialized_start=249,
+  serialized_end=429,
   methods=[
   _descriptor.MethodDescriptor(
     name='Create',
