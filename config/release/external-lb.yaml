@@ -1,4 +1,60 @@
 apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - manager.external-loadbalancer
+  resources:
+  - farms
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - manager.external-loadbalancer
+  resources:
+  - providers
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+  - update
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   creationTimestamp: null
@@ -36,6 +92,10 @@ spec:
           type: object
         spec:
           properties:
+            ports:
+              items:
+                type: object
+              type: array
             provider:
               type: string
             serviceName:
@@ -46,6 +106,7 @@ spec:
           - serviceName
           - serviceNamespace
           - provider
+          - ports
           type: object
         status:
           properties:
@@ -60,16 +121,7 @@ spec:
               items:
                 type: string
               type: array
-            serviceVersion:
-              type: string
-          required:
-          - ipAdress
-          - nodeList
-          - serviceVersion
-          - connectionStatus
-          - lastUpdate
           type: object
-      type: object
   version: v1alpha1
 ---
 apiVersion: apiextensions.k8s.io/v1beta1
@@ -107,16 +159,7 @@ spec:
           properties:
             connectionStatus:
               type: string
-            lastUpdate:
-              format: date-time
-              type: string
-          required:
-          - connectionStatus
-          - lastUpdate
           type: object
-      required:
-      - spec
-      type: object
   version: v1alpha1
 ---
 apiVersion: v1
@@ -152,9 +195,9 @@ spec:
         name: manager
         resources:
           limits:
-            cpu: 100m
-            memory: 30Mi
+            cpu: 500m
+            memory: 300Mi
           requests:
-            cpu: 100m
-            memory: 20Mi
+            cpu: 500m
+            memory: 100Mi
       terminationGracePeriodSeconds: 10

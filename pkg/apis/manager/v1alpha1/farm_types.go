@@ -17,9 +17,9 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"fmt"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"fmt"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -27,9 +27,9 @@ import (
 
 // FarmSpec defines the desired state of Farm
 type FarmSpec struct {
-	ServiceName      string `json:"serviceName"`
-	ServiceNamespace string `json:"serviceNamespace"`
-	Provider         string `json:"provider"`
+	ServiceName      string               `json:"serviceName"`
+	ServiceNamespace string               `json:"serviceNamespace"`
+	Provider         string               `json:"provider"`
 	Ports            []corev1.ServicePort `json:"ports"`
 }
 
@@ -67,6 +67,6 @@ func init() {
 	SchemeBuilder.Register(&Farm{}, &FarmList{})
 }
 
-func (f *Farm)FarmName() (string) {
-	return fmt.Sprintf("%s-%s",f.Namespace,f.Name)
+func (f *Farm) FarmName() string {
+	return fmt.Sprintf("%s-%s", f.Namespace, f.Name)
 }

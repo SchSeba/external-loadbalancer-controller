@@ -32,9 +32,9 @@ import (
 	managerv1alpha1 "github.com/k8s-external-lb/external-loadbalancer-controller/pkg/apis/manager/v1alpha1"
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/log"
 
+	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/farm"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/record"
-	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/farm"
 )
 
 type NodeController struct {
@@ -42,8 +42,8 @@ type NodeController struct {
 	ReconcileNode reconcile.Reconciler
 }
 
-func NewNodeController(mgr manager.Manager, kubeClient *kubernetes.Clientset, farmController *farm.FarmController,nodeMap map[string]string) (*NodeController, error) {
-	reconcileNode := newReconciler(mgr, kubeClient, farmController,nodeMap)
+func NewNodeController(mgr manager.Manager, kubeClient *kubernetes.Clientset, farmController *farm.FarmController, nodeMap map[string]string) (*NodeController, error) {
+	reconcileNode := newReconciler(mgr, kubeClient, farmController, nodeMap)
 
 	controllerInstance, err := newController(mgr, reconcileNode)
 	if err != nil {
@@ -57,13 +57,13 @@ func NewNodeController(mgr manager.Manager, kubeClient *kubernetes.Clientset, fa
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, kubeClient *kubernetes.Clientset,farmController *farm.FarmController,nodeMap map[string]string) *ReconcileNode {
+func newReconciler(mgr manager.Manager, kubeClient *kubernetes.Clientset, farmController *farm.FarmController, nodeMap map[string]string) *ReconcileNode {
 	return &ReconcileNode{Client: mgr.GetClient(),
-		kubeClient:         kubeClient,
+		kubeClient:     kubeClient,
 		farmController: farmController,
-		scheme:             mgr.GetScheme(),
-		Event:              mgr.GetRecorder(managerv1alpha1.EventRecorderName),
-		NodeMap:            nodeMap}
+		scheme:         mgr.GetScheme(),
+		Event:          mgr.GetRecorder(managerv1alpha1.EventRecorderName),
+		NodeMap:        nodeMap}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -88,11 +88,11 @@ var _ reconcile.Reconciler = &ReconcileNode{}
 // ReconcileNode reconciles a Node object
 type ReconcileNode struct {
 	client.Client
-	kubeClient         *kubernetes.Clientset
-	Event              record.EventRecorder
+	kubeClient     *kubernetes.Clientset
+	Event          record.EventRecorder
 	farmController *farm.FarmController
-	scheme             *runtime.Scheme
-	NodeMap            map[string]string
+	scheme         *runtime.Scheme
+	NodeMap        map[string]string
 }
 
 //func (r *ReconcileNode) updateProviderNodeList() error {
@@ -136,7 +136,7 @@ func (r *ReconcileNode) Reconcile(request reconcile.Request) (reconcile.Result, 
 		if errors.IsNotFound(err) {
 			// TODO: need to implement this
 			log.Log.Info("Remove node")
-			return reconcile.Result{},nil
+			return reconcile.Result{}, nil
 		}
 
 		log.Log.Errorf("Fail to reconcile node error message: %s", err.Error())

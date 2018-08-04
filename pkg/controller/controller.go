@@ -35,13 +35,13 @@ var AddToManagerFuncs []func(manager.Manager) error
 // AddToManager adds all Controllers to the Manager
 func AddToManager(m manager.Manager, kubeClient *kubernetes.Clientset) error {
 
-	nodes, err :=kubeClient.CoreV1().Nodes().List(metav1.ListOptions{})
+	nodes, err := kubeClient.CoreV1().Nodes().List(metav1.ListOptions{})
 	if err != nil {
 		panic(err)
 	}
 
 	nodeList := make([]string, 0)
-	nodeMap  := make(map[string]string)
+	nodeMap := make(map[string]string)
 	for _, nodeInstance := range nodes.Items {
 		for _, IpAddr := range nodeInstance.Status.Addresses {
 			if IpAddr.Type == "InternalIP" {
@@ -53,17 +53,17 @@ func AddToManager(m manager.Manager, kubeClient *kubernetes.Clientset) error {
 		}
 	}
 
-	providerController, err := provider.NewProviderController(m, kubeClient,nodeList)
+	providerController, err := provider.NewProviderController(m, kubeClient, nodeList)
 	if err != nil {
 		return err
 	}
 
-	farmController, err := farm.NewFarmController(m,providerController,kubeClient)
+	farmController, err := farm.NewFarmController(m, providerController, kubeClient)
 	if err != nil {
 		return err
 	}
 
-	_, err = node.NewNodeController(m, kubeClient, farmController,nodeMap)
+	_, err = node.NewNodeController(m, kubeClient, farmController, nodeMap)
 	if err != nil {
 		return err
 	}

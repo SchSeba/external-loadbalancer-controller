@@ -28,7 +28,7 @@ const (
 	ExternalLoadbalancerAnnotationKey = "external.loadbalancer/provider"
 	ExternalLoadbalancerDefaultLabel  = "external-loadbalancer-default"
 
-	ProviderResourceName = "providers.manager.external-loadbalancer"
+	ProviderResourceName            = "providers.manager.external-loadbalancer"
 	ProviderConnectionStatusFail    = "Failed"
 	ProviderConnectionStatusSuccess = "Synced"
 

@@ -19,11 +19,11 @@ package farm
 import (
 	"context"
 	"fmt"
-	"time"
 	"reflect"
+	"time"
 
-	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/log"
 	managerv1alpha1 "github.com/k8s-external-lb/external-loadbalancer-controller/pkg/apis/manager/v1alpha1"
+	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/log"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -45,21 +45,21 @@ import (
 )
 
 type FarmController struct {
-	Client        client.Client
-	Controller    controller.Controller
+	Client             client.Client
+	Controller         controller.Controller
 	providerController *provider.ProviderController
-	kubeClient  *kubernetes.Clientset
-	ReconcileFarm *ReconcileFarm
+	kubeClient         *kubernetes.Clientset
+	ReconcileFarm      *ReconcileFarm
 }
 
-func NewFarmController(mgr manager.Manager, providerController *provider.ProviderController,kubeClient *kubernetes.Clientset) (*FarmController, error) {
-	reconcileFarm := newReconciler(mgr,providerController)
+func NewFarmController(mgr manager.Manager, providerController *provider.ProviderController, kubeClient *kubernetes.Clientset) (*FarmController, error) {
+	reconcileFarm := newReconciler(mgr, providerController)
 	controllerInstance, err := newController(mgr, reconcileFarm)
 	if err != nil {
 		return nil, err
 	}
 
-	farmController := &FarmController{Client: mgr.GetClient(), Controller: controllerInstance, providerController:providerController,ReconcileFarm: reconcileFarm,kubeClient:kubeClient}
+	farmController := &FarmController{Client: mgr.GetClient(), Controller: controllerInstance, providerController: providerController, ReconcileFarm: reconcileFarm, kubeClient: kubeClient}
 	go farmController.CleanRemovedServices()
 	go farmController.reSyncFailFarms()
 
@@ -84,11 +84,11 @@ func newController(mgr manager.Manager, r reconcile.Reconciler) (controller.Cont
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager,providerController *provider.ProviderController) *ReconcileFarm {
+func newReconciler(mgr manager.Manager, providerController *provider.ProviderController) *ReconcileFarm {
 	return &ReconcileFarm{Client: mgr.GetClient(),
 		providerController: providerController,
-		scheme: mgr.GetScheme(),
-		Event:  mgr.GetRecorder(managerv1alpha1.EventRecorderName)}
+		scheme:             mgr.GetScheme(),
+		Event:              mgr.GetRecorder(managerv1alpha1.EventRecorderName)}
 }
 
 func (f *FarmController) GetFarm(farmName string) (*managerv1alpha1.Farm, error) {
@@ -101,7 +101,7 @@ func (f *FarmController) GetFarm(farmName string) (*managerv1alpha1.Farm, error)
 	return farm, nil
 }
 
-func (f *FarmController) CreateOrUpdateFarm(service *corev1.Service) (bool) {
+func (f *FarmController) CreateOrUpdateFarm(service *corev1.Service) bool {
 	farmName := fmt.Sprintf("%s-%s", service.Namespace, service.Name)
 	farm := &managerv1alpha1.Farm{}
 
@@ -111,77 +111,76 @@ func (f *FarmController) CreateOrUpdateFarm(service *corev1.Service) (bool) {
 			f.createFarm(service)
 			return true
 		}
-		f.markServiceStatusFail(service,fmt.Sprintf("Fail to get farm object for service %s on namespace %s",service.Name,service.Namespace))
+		f.markServiceStatusFail(service, fmt.Sprintf("Fail to get farm object for service %s on namespace %s", service.Name, service.Namespace))
 		return true
 	}
-	
-	needToUpdate , err := f.needToUpdate(farm,service)
+
+	needToUpdate, err := f.needToUpdate(farm, service)
 	if err != nil {
 		return true
 	}
 
 	if needToUpdate {
-		f.updateFarm(farm,service)
+		f.updateFarm(farm, service)
 		return true
 	}
 
-	return f.needToAddIngressIpFromFarm(service,farm)
+	return f.needToAddIngressIpFromFarm(service, farm)
 }
 
-func (f *FarmController) needToAddIngressIpFromFarm(service *corev1.Service,farm *managerv1alpha1.Farm) (bool) {
+func (f *FarmController) needToAddIngressIpFromFarm(service *corev1.Service, farm *managerv1alpha1.Farm) bool {
 	ingressList := []corev1.LoadBalancerIngress{}
 
-	for _,externalIP := range service.Spec.ExternalIPs {
-		ingressList = append(ingressList,corev1.LoadBalancerIngress{IP:externalIP})
+	for _, externalIP := range service.Spec.ExternalIPs {
+		ingressList = append(ingressList, corev1.LoadBalancerIngress{IP: externalIP})
 	}
 
-	ingressList = append(ingressList,corev1.LoadBalancerIngress{IP:farm.Status.IpAdress})
+	ingressList = append(ingressList, corev1.LoadBalancerIngress{IP: farm.Status.IpAdress})
 
-	if !reflect.DeepEqual(ingressList,service.Status.LoadBalancer.Ingress) {
+	if !reflect.DeepEqual(ingressList, service.Status.LoadBalancer.Ingress) {
 		service.Status.LoadBalancer.Ingress = ingressList
 		return true
 	}
 	return false
 }
 
-
 func (f *FarmController) createFarm(service *corev1.Service) {
 	providerInstance, err := f.getProvider(service)
 	if err != nil {
-		log.Log.V(2).Errorf("Fail to find provider for service %s on namespace %s",service.Name,service.Namespace)
-		f.markServiceStatusFail(service,"Fail to find a provider for the service")
+		log.Log.V(2).Errorf("Fail to find provider for service %s on namespace %s", service.Name, service.Namespace)
+		f.markServiceStatusFail(service, "Fail to find a provider for the service")
 	}
 
-	farm := CreateFarmObject(service,fmt.Sprintf("%s-%s",service.Namespace,service.Name),providerInstance.Name)
+	farm := CreateFarmObject(service, fmt.Sprintf("%s-%s", service.Namespace, service.Name), providerInstance.Name)
 
 	farmIpAddress, err := f.providerController.CreateFarm(farm)
 	if err != nil {
-		f.markServiceStatusFail(service,fmt.Sprintf("Fail to create farm on provider error: %s", err.Error()))
+		f.markServiceStatusFail(service, fmt.Sprintf("Fail to create farm on provider error: %s", err.Error()))
 		return
 	}
 
-	errCreateFarm := f.Client.Create(context.Background(),farm)
+	errCreateFarm := f.Client.Create(context.Background(), farm)
 	if errCreateFarm != nil {
-		log.Log.V(2).Errorf("Fail to create farm error message: %s",errCreateFarm.Error())
-		f.markServiceStatusFail(service,fmt.Sprintf("Fail to create farm error message: %s",errCreateFarm.Error()))
+		log.Log.V(2).Errorf("Fail to create farm error message: %s", errCreateFarm.Error())
+		f.markServiceStatusFail(service, fmt.Sprintf("Fail to create farm error message: %s", errCreateFarm.Error()))
 	}
 
 	if err != nil {
-		log.Log.V(2).Errorf("Fail to create farm  on provider %s error message: %s",farm.Spec.Provider,errCreateFarm.Error())
+		log.Log.V(2).Errorf("Fail to create farm  on provider %s error message: %s", farm.Spec.Provider, errCreateFarm.Error())
 		f.FarmUpdateFailStatus(farm, "Warning", "FarmCreatedFail", err.Error())
 	}
 
 	f.FarmUpdateSuccessStatus(farm, farmIpAddress, "Normal", "FarmCreated", fmt.Sprintf("Farm created on provider %s", farm.Spec.Provider))
-	err = f.Client.Update(context.Background(),farm)
+	err = f.Client.Update(context.Background(), farm)
 	if err != nil {
-		log.Log.V(2).Errorf("Fail to update farm status error message: %s",errCreateFarm.Error())
+		log.Log.V(2).Errorf("Fail to update farm status error message: %s", errCreateFarm.Error())
 		return
 	}
 
-	f.updateServiceIpAddress(service,farmIpAddress)
+	f.updateServiceIpAddress(service, farmIpAddress)
 }
 
-func (f *FarmController) markServiceStatusFail(service *corev1.Service,message string) {
+func (f *FarmController) markServiceStatusFail(service *corev1.Service, message string) {
 	f.ReconcileFarm.Event.Event(service.DeepCopyObject(), "Warning", "FarmCreatedFail", message)
 	service.Labels[managerv1alpha1.ServiceStatusLabel] = managerv1alpha1.ServiceStatusLabelFailed
 }
@@ -189,26 +188,26 @@ func (f *FarmController) markServiceStatusFail(service *corev1.Service,message s
 func (f *FarmController) updateFarm(farm *managerv1alpha1.Farm, service *corev1.Service) {
 	providerInstance, err := f.getProvider(service)
 	if err != nil {
-		log.Log.V(2).Errorf("Fail to find provider for service %s on namespace %s",service.Name,service.Namespace)
-		f.markServiceStatusFail(service,"Fail to find a provider for the service")
+		log.Log.V(2).Errorf("Fail to find provider for service %s on namespace %s", service.Name, service.Namespace)
+		f.markServiceStatusFail(service, "Fail to find a provider for the service")
 	}
 
 	if farm.Spec.Provider != providerInstance.Name {
 		err = f.providerController.DeleteFarm(farm)
 		if err != nil {
 			deletedProviderFarm := CreateFarmObject(service,
-													 fmt.Sprintf("%s-%s-%s",service.Namespace,
-													    providerInstance.Name,
-													    service.Name),providerInstance.Name)
-			f.FarmUpdateFailDeleteStatus(deletedProviderFarm,"Warning","FarmDeleteFail",err.Error())
-			err = f.Client.Update(context.Background(),deletedProviderFarm)
+				fmt.Sprintf("%s-%s-%s", service.Namespace,
+					providerInstance.Name,
+					service.Name), providerInstance.Name)
+			f.FarmUpdateFailDeleteStatus(deletedProviderFarm, "Warning", "FarmDeleteFail", err.Error())
+			err = f.Client.Update(context.Background(), deletedProviderFarm)
 			if err != nil {
 				log.Log.V(2).Error("Fail to create a new farm for for the deleted farm on provider")
 			}
 		}
 
-		delete(service.Labels,managerv1alpha1.ServiceStatusLabel)
-		f.Client.Delete(context.Background(),farm)
+		delete(service.Labels, managerv1alpha1.ServiceStatusLabel)
+		f.Client.Delete(context.Background(), farm)
 		f.createFarm(service)
 		return
 	}
@@ -216,71 +215,70 @@ func (f *FarmController) updateFarm(farm *managerv1alpha1.Farm, service *corev1.
 	farm.Spec.Ports = service.Spec.Ports
 	farmIpAddress, err := f.providerController.UpdateFarm(farm)
 	if err != nil {
-		f.markServiceStatusFail(service,fmt.Sprintf("Fail to update farm on provider error: %s", err.Error()))
+		f.markServiceStatusFail(service, fmt.Sprintf("Fail to update farm on provider error: %s", err.Error()))
 		return
 	}
 
-	errCreateFarm := f.Client.Update(context.Background(),farm)
+	errCreateFarm := f.Client.Update(context.Background(), farm)
 	if errCreateFarm != nil {
-		log.Log.V(2).Errorf("Fail to update farm error message: %s",errCreateFarm.Error())
-		f.markServiceStatusFail(service,fmt.Sprintf("Fail to update farm error message: %s",errCreateFarm.Error()))
+		log.Log.V(2).Errorf("Fail to update farm error message: %s", errCreateFarm.Error())
+		f.markServiceStatusFail(service, fmt.Sprintf("Fail to update farm error message: %s", errCreateFarm.Error()))
 	}
 
 	if err != nil {
-		log.Log.V(2).Errorf("Fail to update farm  on provider %s error message: %s",farm.Spec.Provider,errCreateFarm.Error())
+		log.Log.V(2).Errorf("Fail to update farm  on provider %s error message: %s", farm.Spec.Provider, errCreateFarm.Error())
 		f.FarmUpdateFailStatus(farm, "Warning", "FarmUpdateFail", err.Error())
 	}
 
 	f.FarmUpdateSuccessStatus(farm, farmIpAddress, "Normal", "FarmUpdate", fmt.Sprintf("Farm updated on provider %s", farm.Spec.Provider))
-	err = f.Client.Update(context.Background(),farm)
+	err = f.Client.Update(context.Background(), farm)
 	if err != nil {
-		log.Log.V(2).Errorf("Fail to update farm status error message: %s",errCreateFarm.Error())
+		log.Log.V(2).Errorf("Fail to update farm status error message: %s", errCreateFarm.Error())
 		return
 	}
 
-	delete(service.Labels,managerv1alpha1.ServiceStatusLabel)
-	f.updateServiceIpAddress(service,farmIpAddress)
+	delete(service.Labels, managerv1alpha1.ServiceStatusLabel)
+	f.updateServiceIpAddress(service, farmIpAddress)
 }
 
-func (f *FarmController) DeleteFarm(serviceNamespace,serviceName string) {
+func (f *FarmController) DeleteFarm(serviceNamespace, serviceName string) {
 	farm := &managerv1alpha1.Farm{}
-	err := f.Client.Get(context.Background(),client.ObjectKey{Name:fmt.Sprintf("%s-%s",serviceNamespace,serviceName),Namespace:managerv1alpha1.ControllerNamespace},farm)
+	err := f.Client.Get(context.Background(), client.ObjectKey{Name: fmt.Sprintf("%s-%s", serviceNamespace, serviceName), Namespace: managerv1alpha1.ControllerNamespace}, farm)
 	if err != nil {
-		log.Log.V(2).Errorf("Fail to find farm %s-%s for deletion",serviceName,serviceNamespace)
+		log.Log.V(2).Errorf("Fail to find farm %s-%s for deletion", serviceName, serviceNamespace)
 		return
 	}
 
 	err = f.providerController.DeleteFarm(farm)
 	if err != nil {
-		log.Log.V(2).Errorf("Fail to delete farm  on provider %s error message: %s",farm.Spec.Provider,err.Error())
-		f.FarmUpdateFailDeleteStatus(farm,"Warning","FarmDeleteFail",err.Error())
-		err = f.Client.Update(context.Background(),farm)
+		log.Log.V(2).Errorf("Fail to delete farm  on provider %s error message: %s", farm.Spec.Provider, err.Error())
+		f.FarmUpdateFailDeleteStatus(farm, "Warning", "FarmDeleteFail", err.Error())
+		err = f.Client.Update(context.Background(), farm)
 		if err != nil {
-			log.Log.V(2).Errorf("Fail to update delete label on farm %s",farm.Name)
+			log.Log.V(2).Errorf("Fail to update delete label on farm %s", farm.Name)
 		}
 
 		return
 	}
 
-	err = f.Client.Delete(context.Background(),farm)
+	err = f.Client.Delete(context.Background(), farm)
 	if err != nil {
-		log.Log.V(2).Errorf("Fail to delete farm %s",farm.Name)
+		log.Log.V(2).Errorf("Fail to delete farm %s", farm.Name)
 	}
 }
 
-func (f *FarmController) updateServiceIpAddress(service *corev1.Service,farmIpAddress string) {
+func (f *FarmController) updateServiceIpAddress(service *corev1.Service, farmIpAddress string) {
 	ingressList := []corev1.LoadBalancerIngress{}
 
-	for _,externalIP := range service.Spec.ExternalIPs {
-		ingressList = append(ingressList,corev1.LoadBalancerIngress{IP:externalIP})
+	for _, externalIP := range service.Spec.ExternalIPs {
+		ingressList = append(ingressList, corev1.LoadBalancerIngress{IP: externalIP})
 	}
 
-	ingressList = append(ingressList,corev1.LoadBalancerIngress{IP:farmIpAddress})
+	ingressList = append(ingressList, corev1.LoadBalancerIngress{IP: farmIpAddress})
 	service.Status.LoadBalancer.Ingress = ingressList
 }
 
-
-func (f *FarmController)updateLabels(farm *managerv1alpha1.Farm, status string) {
+func (f *FarmController) updateLabels(farm *managerv1alpha1.Farm, status string) {
 	if farm.Labels == nil {
 		farm.Labels = make(map[string]string)
 	}
@@ -291,32 +289,32 @@ func (f *FarmController)updateLabels(farm *managerv1alpha1.Farm, status string) 
 
 func (f *FarmController) FarmUpdateFailStatus(farm *managerv1alpha1.Farm, eventType, reason, message string) {
 	f.ReconcileFarm.Event.Event(farm.DeepCopyObject(), eventType, reason, message)
-	f.updateLabels(farm,managerv1alpha1.FarmStatusLabelFailed)
+	f.updateLabels(farm, managerv1alpha1.FarmStatusLabelFailed)
 }
 
 func (f *FarmController) FarmUpdateFailDeleteStatus(farm *managerv1alpha1.Farm, eventType, reason, message string) {
 	f.ReconcileFarm.Event.Event(farm.DeepCopyObject(), eventType, reason, message)
-	f.updateLabels(farm,managerv1alpha1.FarmStatusLabelDeleted)
+	f.updateLabels(farm, managerv1alpha1.FarmStatusLabelDeleted)
 }
 
 func (f *FarmController) FarmUpdateSuccessStatus(farm *managerv1alpha1.Farm, ipAddress, eventType, reason, message string) {
 	f.ReconcileFarm.Event.Event(farm.DeepCopy(), eventType, reason, message)
-	f.updateLabels(farm,managerv1alpha1.FarmStatusLabelSynced)
+	f.updateLabels(farm, managerv1alpha1.FarmStatusLabelSynced)
 	farm.Status.IpAdress = ipAddress
 }
 
 func (f *FarmController) needToUpdate(farm *managerv1alpha1.Farm, service *corev1.Service) (bool, error) {
 	providerInstance, err := f.getProvider(service)
 	if err != nil {
-		f.markServiceStatusFail(service,fmt.Sprintf("Fail to create farm on provider error: %s", err.Error()))
-		return false,err
+		f.markServiceStatusFail(service, fmt.Sprintf("Fail to create farm on provider error: %s", err.Error()))
+		return false, err
 	}
 
 	if farm.Spec.Provider != providerInstance.Name {
 		return true, nil
 	}
 
-	if _,ok := service.Labels[managerv1alpha1.ServiceStatusLabel]; ok {
+	if _, ok := service.Labels[managerv1alpha1.ServiceStatusLabel]; ok {
 		return true, nil
 	}
 
@@ -332,16 +330,16 @@ func (f *FarmController) needToUpdate(farm *managerv1alpha1.Farm, service *corev
 }
 
 func (f *FarmController) getServiceFromFarm(farmInstance *managerv1alpha1.Farm) (*corev1.Service, error) {
-	return f.kubeClient.CoreV1().Services(farmInstance.Spec.ServiceNamespace).Get(farmInstance.Spec.ServiceName,metav1.GetOptions{})
+	return f.kubeClient.CoreV1().Services(farmInstance.Spec.ServiceNamespace).Get(farmInstance.Spec.ServiceName, metav1.GetOptions{})
 }
 
 func (f *FarmController) serviceExist(farmInstance *managerv1alpha1.Farm) bool {
-	_, err :=f.getServiceFromFarm(farmInstance)
+	_, err := f.getServiceFromFarm(farmInstance)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return false
 		}
-		log.Log.V(2).Errorf("fail to get service %s on namespace %s from farm with error message %s",farmInstance.Spec.ServiceNamespace,farmInstance.Spec.ServiceName,err.Error())
+		log.Log.V(2).Errorf("fail to get service %s on namespace %s from farm with error message %s", farmInstance.Spec.ServiceNamespace, farmInstance.Spec.ServiceName, err.Error())
 	}
 
 	return true
@@ -361,14 +359,14 @@ func (f *FarmController) reSyncFailFarms() {
 			log.Log.V(2).Error("reSyncProcess: Fail to get farm list")
 		} else {
 			for _, farmInstance := range farmList.Items {
-				if ! f.serviceExist(&farmInstance) {
-					f.DeleteFarm(farmInstance.Spec.ServiceNamespace,farmInstance.Spec.ServiceName)
+				if !f.serviceExist(&farmInstance) {
+					f.DeleteFarm(farmInstance.Spec.ServiceNamespace, farmInstance.Spec.ServiceName)
 				} else {
 					service, err := f.getServiceFromFarm(&farmInstance)
 					if err != nil {
-						log.Log.V(2).Errorf("fail to get service %s on namespace %s from farm with error message %s",farmInstance.Spec.ServiceNamespace,farmInstance.Spec.ServiceName,err.Error())
+						log.Log.V(2).Errorf("fail to get service %s on namespace %s from farm with error message %s", farmInstance.Spec.ServiceNamespace, farmInstance.Spec.ServiceName, err.Error())
 					}
-					f.updateFarm(&farmInstance,service)
+					f.updateFarm(&farmInstance, service)
 				}
 			}
 		}
@@ -388,7 +386,7 @@ func (f *FarmController) CleanRemovedServices() {
 			for _, farmInstance := range farmList.Items {
 				err := f.Client.Get(context.Background(), client.ObjectKey{Name: farmInstance.Spec.ServiceName, Namespace: farmInstance.Spec.ServiceNamespace}, service)
 				if err != nil && errors.IsNotFound(err) {
-					f.DeleteFarm(farmInstance.Spec.ServiceNamespace,farmInstance.Spec.ServiceName)
+					f.DeleteFarm(farmInstance.Spec.ServiceNamespace, farmInstance.Spec.ServiceName)
 				}
 			}
 		}
@@ -436,8 +434,8 @@ var _ reconcile.Reconciler = &ReconcileFarm{}
 type ReconcileFarm struct {
 	client.Client
 	providerController *provider.ProviderController
-	Event  record.EventRecorder
-	scheme *runtime.Scheme
+	Event              record.EventRecorder
+	scheme             *runtime.Scheme
 }
 
 // Reconcile reads that state of the cluster for a Farm object and makes changes based on the state read
@@ -461,15 +459,14 @@ func (r *ReconcileFarm) Reconcile(request reconcile.Request) (reconcile.Result, 
 	return reconcile.Result{}, nil
 }
 
-
-func CreateFarmObject(service *corev1.Service,farmName,providerName string) *managerv1alpha1.Farm {
-	return &managerv1alpha1.Farm{ObjectMeta:metav1.ObjectMeta{Name:farmName,Namespace:managerv1alpha1.ControllerNamespace},
-		Spec:managerv1alpha1.FarmSpec{ServiceName:service.Name,
-			ServiceNamespace:service.Namespace,
-			Ports:service.Spec.Ports,
-			Provider:providerName},Status:FarmDefaultStatus()}
+func CreateFarmObject(service *corev1.Service, farmName, providerName string) *managerv1alpha1.Farm {
+	return &managerv1alpha1.Farm{ObjectMeta: metav1.ObjectMeta{Name: farmName, Namespace: managerv1alpha1.ControllerNamespace},
+		Spec: managerv1alpha1.FarmSpec{ServiceName: service.Name,
+			ServiceNamespace: service.Namespace,
+			Ports:            service.Spec.Ports,
+			Provider:         providerName}, Status: FarmDefaultStatus()}
 }
 
-func FarmDefaultStatus() (managerv1alpha1.FarmStatus) {
-	return managerv1alpha1.FarmStatus{NodeList:[]string{},IpAdress:"",LastUpdate:metav1.NewTime(time.Now()),ConnectionStatus:""}
+func FarmDefaultStatus() managerv1alpha1.FarmStatus {
+	return managerv1alpha1.FarmStatus{NodeList: []string{}, IpAdress: "", LastUpdate: metav1.NewTime(time.Now()), ConnectionStatus: ""}
 }

@@ -18,8 +18,8 @@ package main
 
 import (
 	"flag"
-	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/manager"
+	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 )
 
 func main() {

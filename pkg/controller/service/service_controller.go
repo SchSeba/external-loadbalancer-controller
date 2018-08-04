@@ -64,10 +64,10 @@ func NewServiceController(mgr manager.Manager, kubeClient *kubernetes.Clientset,
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, kubeClient *kubernetes.Clientset, farmController *farm.FarmController) *ReconcileService {
 	return &ReconcileService{Client: mgr.GetClient(),
-		kubeClient:         kubeClient,
-		scheme:             mgr.GetScheme(),
-		Event:              mgr.GetRecorder(managerv1alpha1.EventRecorderName),
-		FarmController:     farmController}
+		kubeClient:     kubeClient,
+		scheme:         mgr.GetScheme(),
+		Event:          mgr.GetRecorder(managerv1alpha1.EventRecorderName),
+		FarmController: farmController}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -92,10 +92,10 @@ var _ reconcile.Reconciler = &ReconcileService{}
 // ReconcileService reconciles a Service object
 type ReconcileService struct {
 	client.Client
-	kubeClient         *kubernetes.Clientset
-	Event              record.EventRecorder
-	FarmController     *farm.FarmController
-	scheme             *runtime.Scheme
+	kubeClient     *kubernetes.Clientset
+	Event          record.EventRecorder
+	FarmController *farm.FarmController
+	scheme         *runtime.Scheme
 }
 
 // Reconcile reads that state of the cluster for a Service object and makes changes based on the state read
@@ -124,14 +124,13 @@ func (r *ReconcileService) Reconcile(request reconcile.Request) (reconcile.Resul
 	//log.Infof("%+v", *service)
 
 	if r.FarmController.CreateOrUpdateFarm(service) {
-		_,err := r.kubeClient.CoreV1().Services(service.Namespace).UpdateStatus(service)
+		_, err := r.kubeClient.CoreV1().Services(service.Namespace).UpdateStatus(service)
 		if err != nil {
-			log.Errorf("Fail to update service status error message: %s",err.Error())
+			log.Errorf("Fail to update service status error message: %s", err.Error())
 		}
 	}
 	return reconcile.Result{}, nil
 }
-
 
 func (r *ReconcileService) reSyncProcess() {
 	resyncTick := time.Tick(30 * time.Second)

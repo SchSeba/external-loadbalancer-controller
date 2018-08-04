@@ -14,17 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-
 package manager
 
 import (
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"k8s.io/client-go/kubernetes"
-	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
-	"log"
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/apis"
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller"
+	"k8s.io/client-go/kubernetes"
+	"log"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
 )
 
 func StartManager() {
