@@ -29,12 +29,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
-// AddToManagerFuncs is a list of functions to add all Controllers to the Manager
-var AddToManagerFuncs []func(manager.Manager) error
 
-// AddToManager adds all Controllers to the Manager
-func AddToManager(m manager.Manager, kubeClient *kubernetes.Clientset) error {
-
+func LoadNodes(kubeClient *kubernetes.Clientset) ([]string,map[string]string) {
 	nodes, err := kubeClient.CoreV1().Nodes().List(metav1.ListOptions{})
 	if err != nil {
 		panic(err)
@@ -52,6 +48,17 @@ func AddToManager(m manager.Manager, kubeClient *kubernetes.Clientset) error {
 			}
 		}
 	}
+
+	return nodeList, nodeMap
+}
+
+// AddToManagerFuncs is a list of functions to add all Controllers to the Manager
+var AddToManagerFuncs []func(manager.Manager) error
+
+// AddToManager adds all Controllers to the Manager
+func AddToManager(m manager.Manager, kubeClient *kubernetes.Clientset) error {
+
+	nodeList, nodeMap := LoadNodes(kubeClient)
 
 	providerController, err := provider.NewProviderController(m, kubeClient, nodeList)
 	if err != nil {

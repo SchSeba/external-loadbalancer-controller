@@ -20,10 +20,10 @@ import (
 	"context"
 	"fmt"
 	"time"
-
-	managerv1alpha1 "github.com/k8s-external-lb/external-loadbalancer-controller/pkg/apis/manager/v1alpha1"
 	. "github.com/k8s-external-lb/external-loadbalancer-controller/pkg/grpc-client"
+	managerv1alpha1 "github.com/k8s-external-lb/external-loadbalancer-controller/pkg/apis/manager/v1alpha1"
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/log"
+
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -108,7 +108,6 @@ func (p *ProviderController) CreateFarm(farm *managerv1alpha1.Farm) (string, err
 		return "", err
 	}
 
-	farm.Status.NodeList = p.ReconcileProvider.NodeList
 	farmIpAddress, err := Grpc.CreateFarm(provider.Spec.Url, farm)
 
 	if err != nil {
@@ -127,7 +126,6 @@ func (p *ProviderController) UpdateFarm(farm *managerv1alpha1.Farm) (string, err
 		return "", err
 	}
 
-	farm.Status.NodeList = p.ReconcileProvider.NodeList
 	farmIpAddress, err := Grpc.UpdateFarm(provider.Spec.Url, farm)
 	if err != nil {
 		log.Log.V(2).Errorf("Fail to update farm: %s on provider %s error message: %s", farm.FarmName(), provider.Name, err.Error())

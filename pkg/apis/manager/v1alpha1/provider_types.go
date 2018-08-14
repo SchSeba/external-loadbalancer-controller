@@ -28,6 +28,7 @@ import (
 type ProviderSpec struct {
 	Url     string `json:"url"`
 	Default bool   `json:"default,omitempty"`
+	Internal bool `json:"internal,omitempty"`
 }
 
 // ProviderStatus defines the observed state of Provider
