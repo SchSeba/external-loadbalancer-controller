@@ -257,6 +257,7 @@ func (f *FarmController) updateFarm(farm *managerv1alpha1.Farm, service *corev1.
 
 	delete(service.Labels, managerv1alpha1.ServiceStatusLabel)
 	f.updateServiceIpAddress(service, farmIpAddress)
+	log.Log.Infof("Successfully create a farm %s for service %s on provider %s",farm.Name,service.Name,providerInstance.Name)
 }
 
 func (f *FarmController) DeleteFarm(serviceNamespace, serviceName string) {
@@ -269,7 +270,7 @@ func (f *FarmController) DeleteFarm(serviceNamespace, serviceName string) {
 
 	err = f.providerController.DeleteFarm(farm)
 	if err != nil {
-		log.Log.V(2).Errorf("Fail to delete farm  on provider %s error message: %s", farm.Spec.Provider, err.Error())
+		log.Log.V(2).Errorf("Fail to delete farm on provider %s error message: %s", farm.Spec.Provider, err.Error())
 		f.FarmUpdateFailDeleteStatus(farm, "Warning", "FarmDeleteFail", err.Error())
 		err = f.Client.Update(context.Background(), farm)
 		if err != nil {
@@ -324,7 +325,7 @@ func (f *FarmController) FarmUpdateSuccessStatus(farm *managerv1alpha1.Farm, ipA
 func (f *FarmController) needToUpdate(farm *managerv1alpha1.Farm, service *corev1.Service) (bool, error) {
 	providerInstance, err := f.getProvider(service)
 	if err != nil {
-		f.markServiceStatusFail(service, fmt.Sprintf("Fail to get provider for service %s in namespace error: %v",service.Name,service.Namespace, err))
+		f.markServiceStatusFail(service, fmt.Sprintf("Fail to get provider for service %s in namespace %s error: %v",service.Name,service.Namespace, err))
 		return false, err
 	}
 
@@ -342,7 +343,7 @@ func (f *FarmController) needToUpdate(farm *managerv1alpha1.Farm, service *corev
 
 	nodeList, err := f.getNodeList(service,providerInstance)
 	if err != nil {
-		f.markServiceStatusFail(service, fmt.Sprintf("Fail to get node lists for service %s in namespace error: %v",service.Name,service.Namespace, err))
+		f.markServiceStatusFail(service, fmt.Sprintf("Fail to get node lists for service %s in namespace %s error: %v",service.Name,service.Namespace, err))
 		return false, err
 	}
 

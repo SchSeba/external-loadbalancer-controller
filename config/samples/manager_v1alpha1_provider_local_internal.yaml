@@ -11,10 +11,11 @@ kind: Provider
 metadata:
   labels:
     controller-tools.k8s.io: "1.0"
-    external-loadbalancer-default: "true"
-  name: provider-sample
+#    external-loadbalancer-default: "true"
+  name: provider-sample-internal
   namespace: external-loadbalancer
 spec:
   # Add fields here
   url: 127.0.0.1:8050
   default: true
+  internal: true

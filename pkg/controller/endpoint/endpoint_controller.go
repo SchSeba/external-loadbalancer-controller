@@ -138,7 +138,6 @@ func (r *ReconcileEndPoint) Reconcile(request reconcile.Request) (reconcile.Resu
 		}
 
 		log.Log.Errorf("Fail to reconcile endpoint error message: %s", err.Error())
-
 		return reconcile.Result{}, err
 	}
 
