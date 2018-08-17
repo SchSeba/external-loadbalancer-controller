@@ -48,6 +48,18 @@ type ServiceController struct {
 	ReconcileService *ReconcileService
 }
 
+func (s *ServiceController)UpdateAllServices() {
+	services, err := s.ReconcileService.kubeClient.CoreV1().Services("").List(metav1.ListOptions{})
+	if err != nil {
+		log.Log.Errorf("Fail to get all services error: %v",err)
+	}
+
+	for _,service := range services.Items {
+		s.ReconcileService.Reconcile(reconcile.Request{NamespacedName: types.NamespacedName{Namespace: service.Namespace, Name: service.Name}})
+	}
+}
+
+
 func NewServiceController(mgr manager.Manager, kubeClient *kubernetes.Clientset, farmController *farm.FarmController) (*ServiceController, error) {
 	reconcileService := newReconciler(mgr, kubeClient, farmController)
 
@@ -129,25 +141,24 @@ func (r *ReconcileService) Reconcile(request reconcile.Request) (reconcile.Resul
 		if err != nil {
 			log.Log.Errorf("Fail to update service status error message: %s", err.Error())
 		} else {
-			r.FarmController.UpdateSuccessEventOnService(service,"Successfully create/update service on provider")
+			r.FarmController.UpdateSuccessEventOnService(service, "Successfully create/update service on provider")
 		}
 	}
 	return reconcile.Result{}, nil
 }
 
-
-func (r *ReconcileService)UpdateEndpoints(endpoint *corev1.Endpoints) {
+func (r *ReconcileService) UpdateEndpoints(endpoint *corev1.Endpoints) {
 	service, err := r.getServiceFromEndpoint(endpoint)
 	if err != nil {
-		log.Log.Errorf("fail to find service for endpoint %s in namespace %s error: %v",endpoint.Name,endpoint.Namespace,err)
+		log.Log.Errorf("fail to find service for endpoint %s in namespace %s error: %v", endpoint.Name, endpoint.Namespace, err)
 		return
 	}
 
 	r.Reconcile(reconcile.Request{NamespacedName: types.NamespacedName{Namespace: service.Namespace, Name: service.Name}})
 }
 
-func (r *ReconcileService)getServiceFromEndpoint(endpointInstance *corev1.Endpoints) (*corev1.Service,error) {
-	return r.kubeClient.CoreV1().Services(endpointInstance.Namespace).Get(endpointInstance.Name,metav1.GetOptions{})
+func (r *ReconcileService) getServiceFromEndpoint(endpointInstance *corev1.Endpoints) (*corev1.Service, error) {
+	return r.kubeClient.CoreV1().Services(endpointInstance.Namespace).Get(endpointInstance.Name, metav1.GetOptions{})
 }
 
 func (r *ReconcileService) reSyncProcess() {

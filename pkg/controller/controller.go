@@ -17,19 +17,16 @@ limitations under the License.
 package controller
 
 import (
+	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/endpoint"
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/farm"
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/node"
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/provider"
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/service"
-	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/endpoint"
 
 	"k8s.io/client-go/kubernetes"
 
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
-
-
-
 
 // AddToManagerFuncs is a list of functions to add all Controllers to the Manager
 var AddToManagerFuncs []func(manager.Manager) error
