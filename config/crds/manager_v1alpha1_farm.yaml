@@ -52,4 +52,3 @@ spec:
                 type: string
               type: array
           type: object
-  version: v1alpha1

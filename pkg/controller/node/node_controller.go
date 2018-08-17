@@ -20,8 +20,11 @@ import (
 	"context"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -31,10 +34,11 @@ import (
 
 	managerv1alpha1 "github.com/k8s-external-lb/external-loadbalancer-controller/pkg/apis/manager/v1alpha1"
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/log"
+	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/service"
 
-	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/farm"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/record"
+
 )
 
 type NodeController struct {
@@ -42,10 +46,10 @@ type NodeController struct {
 	ReconcileNode reconcile.Reconciler
 }
 
-func NewNodeController(mgr manager.Manager, kubeClient *kubernetes.Clientset, farmController *farm.FarmController, nodeMap map[string]string) (*NodeController, error) {
-	reconcileNode := newReconciler(mgr, kubeClient, farmController, nodeMap)
+func NewNodeController(mgr manager.Manager, kubeClient *kubernetes.Clientset, serviceController *service.ServiceController) (*NodeController, error) {
+	reconcileNode := newReconciler(mgr, kubeClient, serviceController)
 
-	controllerInstance, err := newController(mgr, reconcileNode)
+	controllerInstance, err := newNodeControllerController(mgr, reconcileNode)
 	if err != nil {
 		return nil, err
 	}
@@ -56,18 +60,41 @@ func NewNodeController(mgr manager.Manager, kubeClient *kubernetes.Clientset, fa
 
 }
 
+
+func loadNodes(kubeClient *kubernetes.Clientset) (map[string]string) {
+	nodes, err := kubeClient.CoreV1().Nodes().List(metav1.ListOptions{})
+	if err != nil {
+		panic(err)
+	}
+
+	nodeMap := make(map[string]string)
+	for _, nodeInstance := range nodes.Items {
+		for _, IpAddr := range nodeInstance.Status.Addresses {
+			if IpAddr.Type == "InternalIP" {
+				if value, ok := nodeMap[nodeInstance.Name]; !ok || value != IpAddr.Address {
+					nodeMap[nodeInstance.Name] = IpAddr.Address
+				}
+			}
+		}
+	}
+
+	return nodeMap
+}
+
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, kubeClient *kubernetes.Clientset, farmController *farm.FarmController, nodeMap map[string]string) *ReconcileNode {
+func newReconciler(mgr manager.Manager, kubeClient *kubernetes.Clientset, serviceController *service.ServiceController) *ReconcileNode {
+
+
 	return &ReconcileNode{Client: mgr.GetClient(),
 		kubeClient:     kubeClient,
-		farmController: farmController,
+		serviceController: serviceController,
 		scheme:         mgr.GetScheme(),
 		Event:          mgr.GetRecorder(managerv1alpha1.EventRecorderName),
-		NodeMap:        nodeMap}
+		NodeMap:        loadNodes(kubeClient)}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
-func newController(mgr manager.Manager, r reconcile.Reconciler) (controller.Controller, error) {
+func newNodeControllerController(mgr manager.Manager, r reconcile.Reconciler) (controller.Controller, error) {
 	// Create a new controller
 	c, err := controller.New("node-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
@@ -90,40 +117,10 @@ type ReconcileNode struct {
 	client.Client
 	kubeClient     *kubernetes.Clientset
 	Event          record.EventRecorder
-	farmController *farm.FarmController
+	serviceController *service.ServiceController
 	scheme         *runtime.Scheme
 	NodeMap        map[string]string
 }
-
-//func (r *ReconcileNode) updateProviderNodeList() error {
-//	needToUpdate := false
-//	nodeList := make([]string, 0)
-//
-//	nodes := &corev1.NodeList{}
-//	err := r.Client.List(context.Background(), nil, nodes)
-//	if err != nil {
-//		return err
-//	}
-//
-//	for _, node := range nodes.Items {
-//		for _, IpAddr := range node.Status.Addresses {
-//			if IpAddr.Type == "InternalIP" {
-//				if value, ok := r.NodeMap[node.Name]; !ok || value != IpAddr.Address {
-//					needToUpdate = true
-//					r.NodeMap[node.Name] = IpAddr.Address
-//					nodeList = append(nodeList, IpAddr.Address)
-//				}
-//			}
-//		}
-//	}
-//
-//	err = nil
-//	if needToUpdate {
-//		r.farmController.CreateNodeList(nodeList)
-//	}
-//
-//	return err
-//}
 
 // Reconcile reads that state of the cluster for a Node object and makes changes based on the state read
 // and what is in the Node.Spec
@@ -144,5 +141,6 @@ func (r *ReconcileNode) Reconcile(request reconcile.Request) (reconcile.Result, 
 		return reconcile.Result{}, err
 	}
 
+	// TODO:(seba) Update services on node change
 	return reconcile.Result{}, nil
 }

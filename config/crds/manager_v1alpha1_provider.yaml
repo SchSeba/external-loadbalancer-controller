@@ -24,6 +24,8 @@ spec:
           properties:
             default:
               type: boolean
+            internal:
+              type: boolean
             url:
               type: string
           required:
@@ -34,4 +36,3 @@ spec:
             connectionStatus:
               type: string
           type: object
-  version: v1alpha1
