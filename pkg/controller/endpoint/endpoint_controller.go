@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package node
+package endpoint
 
 import (
 	"context"
@@ -22,6 +22,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -31,8 +32,8 @@ import (
 
 	managerv1alpha1 "github.com/k8s-external-lb/external-loadbalancer-controller/pkg/apis/manager/v1alpha1"
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/log"
+	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/service"
 
-	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/farm"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/record"
 )
@@ -42,31 +43,31 @@ type EndPointController struct {
 	ReconcileNode reconcile.Reconciler
 }
 
-func NewNodeController(mgr manager.Manager, kubeClient *kubernetes.Clientset, farmController *farm.FarmController) (*EndPointController, error) {
-	reconcileEndPoint := newReconciler(mgr, kubeClient, farmController)
+func NewEndPointController(mgr manager.Manager, kubeClient *kubernetes.Clientset, serviceController *service.ServiceController) (*EndPointController, error) {
+	reconcileEndPoint := newReconciler(mgr, kubeClient, serviceController)
 
-	controllerInstance, err := newController(mgr, reconcileEndPoint)
+	controllerInstance, err := newEndPointController(mgr, reconcileEndPoint)
 	if err != nil {
 		return nil, err
 	}
-	nodeController := &EndPointController{Controller: controllerInstance,
+	endpointController := &EndPointController{Controller: controllerInstance,
 		ReconcileNode: reconcileEndPoint}
 
-	return nodeController, nil
+	return endpointController, nil
 
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, kubeClient *kubernetes.Clientset, farmController *farm.FarmController) *ReconcileEndPoint {
+func newReconciler(mgr manager.Manager, kubeClient *kubernetes.Clientset, serviceController *service.ServiceController) *ReconcileEndPoint {
 	return &ReconcileEndPoint{Client: mgr.GetClient(),
 		kubeClient:     kubeClient,
-		farmController: farmController,
+		serviceController: serviceController,
 		scheme:         mgr.GetScheme(),
 		Event:          mgr.GetRecorder(managerv1alpha1.EventRecorderName)}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
-func newController(mgr manager.Manager, r reconcile.Reconciler) (controller.Controller, error) {
+func newEndPointController(mgr manager.Manager, r reconcile.Reconciler) (controller.Controller, error) {
 	// Create a new controller
 	c, err := controller.New("endpoint-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
@@ -84,12 +85,12 @@ func newController(mgr manager.Manager, r reconcile.Reconciler) (controller.Cont
 
 var _ reconcile.Reconciler = &ReconcileEndPoint{}
 
-// ReconcileNode reconciles a Node object
+// ReconcileNode reconciles a Endpoints object
 type ReconcileEndPoint struct {
 	client.Client
 	kubeClient     *kubernetes.Clientset
 	Event          record.EventRecorder
-	farmController *farm.FarmController
+	serviceController *service.ServiceController
 	scheme         *runtime.Scheme
 }
 
@@ -123,17 +124,16 @@ type ReconcileEndPoint struct {
 //	return err
 //}
 
-// Reconcile reads that state of the cluster for a Node object and makes changes based on the state read
-// and what is in the Node.Spec
+// Reconcile reads that state of the cluster for a Endpoints object and makes changes based on the state read
+// and what is in the Endpoints.Spec
 // +kubebuilder:rbac:groups=core,resources=endpoints,verbs=get;list;watch
 func (r *ReconcileEndPoint) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	// Fetch the Node instance
-	instance := &corev1.Endpoints{}
-	err := r.Get(context.TODO(), request.NamespacedName, instance)
+	endpoint := &corev1.Endpoints{}
+	err := r.Get(context.TODO(), request.NamespacedName, endpoint)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			// TODO: need to implement this
-			log.Log.Info("Remove endpoint")
+			// Object not found, return.  Created objects are automatically garbage collected.
 			return reconcile.Result{}, nil
 		}
 
@@ -141,7 +141,8 @@ func (r *ReconcileEndPoint) Reconcile(request reconcile.Request) (reconcile.Resu
 		return reconcile.Result{}, err
 	}
 
-	// TODO: implement update here
-
+	if len(endpoint.Subsets) > 0 {
+		r.serviceController.ReconcileService.UpdateEndpoints(endpoint)
+	}
 	return reconcile.Result{}, nil
 }

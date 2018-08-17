@@ -20,8 +20,11 @@ import (
 	"context"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -30,8 +33,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	managerv1alpha1 "github.com/k8s-external-lb/external-loadbalancer-controller/pkg/apis/manager/v1alpha1"
+	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/log"
 
-	"github.com/cloudflare/cfssl/log"
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/farm"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
@@ -42,7 +45,7 @@ import (
 
 type ServiceController struct {
 	Controller       controller.Controller
-	ReconcileService reconcile.Reconciler
+	ReconcileService *ReconcileService
 }
 
 func NewServiceController(mgr manager.Manager, kubeClient *kubernetes.Clientset, farmController *farm.FarmController) (*ServiceController, error) {
@@ -121,15 +124,30 @@ func (r *ReconcileService) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, nil
 	}
 
-	//log.Infof("%+v", *service)
-
 	if r.FarmController.CreateOrUpdateFarm(service) {
 		_, err := r.kubeClient.CoreV1().Services(service.Namespace).UpdateStatus(service)
 		if err != nil {
-			log.Errorf("Fail to update service status error message: %s", err.Error())
+			log.Log.Errorf("Fail to update service status error message: %s", err.Error())
+		} else {
+			r.FarmController.UpdateSuccessEventOnService(service,"Successfully create/update service on provider")
 		}
 	}
 	return reconcile.Result{}, nil
+}
+
+
+func (r *ReconcileService)UpdateEndpoints(endpoint *corev1.Endpoints) {
+	service, err := r.getServiceFromEndpoint(endpoint)
+	if err != nil {
+		log.Log.Errorf("fail to find service for endpoint %s in namespace %s error: %v",endpoint.Name,endpoint.Namespace,err)
+		return
+	}
+
+	r.Reconcile(reconcile.Request{NamespacedName: types.NamespacedName{Namespace: service.Namespace, Name: service.Name}})
+}
+
+func (r *ReconcileService)getServiceFromEndpoint(endpointInstance *corev1.Endpoints) (*corev1.Service,error) {
+	return r.kubeClient.CoreV1().Services(endpointInstance.Namespace).Get(endpointInstance.Name,metav1.GetOptions{})
 }
 
 func (r *ReconcileService) reSyncProcess() {
@@ -142,7 +160,7 @@ func (r *ReconcileService) reSyncProcess() {
 		var serviceList corev1.ServiceList
 		err := r.Client.List(context.TODO(), &client.ListOptions{LabelSelector: labelSelector.AsSelector()}, &serviceList)
 		if err != nil {
-			log.Error("reSyncProcess: Fail to get Service list")
+			log.Log.Error("reSyncProcess: Fail to get Service list")
 		} else {
 			for _, service := range serviceList.Items {
 				r.Reconcile(reconcile.Request{NamespacedName: types.NamespacedName{Namespace: service.Namespace, Name: service.Name}})

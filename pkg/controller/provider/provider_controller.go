@@ -50,8 +50,8 @@ type ProviderController struct {
 	ReconcileProvider *ReconcileProvider
 }
 
-func NewProviderController(mgr manager.Manager, kubeClient *kubernetes.Clientset, nodeList []string) (*ProviderController, error) {
-	reconcileProvider := newReconciler(mgr, kubeClient, nodeList)
+func NewProviderController(mgr manager.Manager, kubeClient *kubernetes.Clientset) (*ProviderController, error) {
+	reconcileProvider := newReconciler(mgr, kubeClient)
 	controllerInstance, err := newController(mgr, reconcileProvider)
 	if err != nil {
 		return nil, err
@@ -64,12 +64,11 @@ func NewProviderController(mgr manager.Manager, kubeClient *kubernetes.Clientset
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, kubeClient *kubernetes.Clientset, nodeList []string) *ReconcileProvider {
+func newReconciler(mgr manager.Manager, kubeClient *kubernetes.Clientset) *ReconcileProvider {
 	return &ReconcileProvider{Client: mgr.GetClient(),
 		kubeClient: kubeClient,
 		scheme:     mgr.GetScheme(),
-		Event:      mgr.GetRecorder(managerv1alpha1.EventRecorderName),
-		NodeList:   nodeList}
+		Event:      mgr.GetRecorder(managerv1alpha1.EventRecorderName)}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -153,10 +152,6 @@ func (p *ProviderController) DeleteFarm(farm *managerv1alpha1.Farm) error {
 	log.Log.V(2).Infof("successfully removed farm: %s on provider %s", farm.FarmName(), provider.Name)
 	p.ProviderUpdateSuccessStatus(provider, "Normal", "FarmDeleteSuccess", fmt.Sprintf("Farm %s-%s was deleted on provider", farm.Namespace, farm.Name))
 	return nil
-}
-
-func (p *ProviderController) UpdateNodesList(nodes []string) {
-	p.ReconcileProvider.NodeList = nodes
 }
 
 //func (p *ProviderController) oldUpdateFarm(farm *managerv1alpha1.Farm) (string, error) {
@@ -249,7 +244,6 @@ type ReconcileProvider struct {
 	kubeClient *kubernetes.Clientset
 	Event      record.EventRecorder
 	scheme     *runtime.Scheme
-	NodeList   []string
 }
 
 // TODO: Change this Shit

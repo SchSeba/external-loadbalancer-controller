@@ -111,7 +111,7 @@ func (f *FarmController) CreateOrUpdateFarm(service *corev1.Service) bool {
 			f.createFarm(service)
 			return true
 		}
-		f.markServiceStatusFail(service, fmt.Sprintf("Fail to get farm object for service %s on namespace %s", service.Name, service.Namespace))
+		f.MarkServiceStatusFail(service, fmt.Sprintf("Fail to get farm object for service %s on namespace %s", service.Name, service.Namespace))
 		return true
 	}
 
@@ -148,25 +148,29 @@ func (f *FarmController) createFarm(service *corev1.Service) {
 	providerInstance, err := f.getProvider(service)
 	if err != nil {
 		log.Log.V(2).Errorf("Fail to find provider for service %s on namespace %s", service.Name, service.Namespace)
-		f.markServiceStatusFail(service, "Fail to find a provider for the service")
+		f.MarkServiceStatusFail(service, "Fail to find a provider for the service")
 	}
 
 	farm,err := f.createFarmObject(service, fmt.Sprintf("%s-%s", service.Namespace, service.Name), providerInstance)
 	if err != nil {
-		f.markServiceStatusFail(service, fmt.Sprintf("Fail to create farm error: %v", err))
+		f.MarkServiceStatusFail(service, fmt.Sprintf("Fail to create farm error: %v", err))
+		return
+	}
+
+	if len(farm.Status.NodeList) == 0 {
 		return
 	}
 
 	farmIpAddress, err := f.providerController.CreateFarm(farm)
 	if err != nil {
-		f.markServiceStatusFail(service, fmt.Sprintf("Fail to create farm on provider error: %s", err.Error()))
+		f.MarkServiceStatusFail(service, fmt.Sprintf("Fail to create farm on provider error: %s", err.Error()))
 		return
 	}
 
 	errCreateFarm := f.Client.Create(context.Background(), farm)
 	if errCreateFarm != nil {
 		log.Log.V(2).Errorf("Fail to create farm error message: %s", errCreateFarm.Error())
-		f.markServiceStatusFail(service, fmt.Sprintf("Fail to create farm error message: %s", errCreateFarm.Error()))
+		f.MarkServiceStatusFail(service, fmt.Sprintf("Fail to create farm error message: %s", errCreateFarm.Error()))
 	}
 
 	if err != nil {
@@ -182,9 +186,10 @@ func (f *FarmController) createFarm(service *corev1.Service) {
 	}
 
 	f.updateServiceIpAddress(service, farmIpAddress)
+	log.Log.Infof("Successfully created the farm %s for service %s on provider %s",farm.Name,service.Name,providerInstance.Name)
 }
 
-func (f *FarmController) markServiceStatusFail(service *corev1.Service, message string) {
+func (f *FarmController) MarkServiceStatusFail(service *corev1.Service, message string) {
 	f.ReconcileFarm.Event.Event(service.DeepCopyObject(), "Warning", "FarmCreatedFail", message)
 	if service.Labels == nil {
 		service.Labels = make(map[string]string)
@@ -192,11 +197,15 @@ func (f *FarmController) markServiceStatusFail(service *corev1.Service, message 
 	service.Labels[managerv1alpha1.ServiceStatusLabel] = managerv1alpha1.ServiceStatusLabelFailed
 }
 
+func (f *FarmController) UpdateSuccessEventOnService(service *corev1.Service,message string) {
+	f.ReconcileFarm.Event.Event(service.DeepCopyObject(), "Normal", "FarmCreatedSuccess", message)
+}
+
 func (f *FarmController) updateFarm(farm *managerv1alpha1.Farm, service *corev1.Service) {
 	providerInstance, err := f.getProvider(service)
 	if err != nil {
 		log.Log.V(2).Errorf("Fail to find provider for service %s on namespace %s", service.Name, service.Namespace)
-		f.markServiceStatusFail(service, "Fail to find a provider for the service")
+		f.MarkServiceStatusFail(service, "Fail to find a provider for the service")
 	}
 
 	if farm.Spec.Provider != providerInstance.Name {
@@ -226,21 +235,26 @@ func (f *FarmController) updateFarm(farm *managerv1alpha1.Farm, service *corev1.
 	farm.Spec.Ports = service.Spec.Ports
 	nodelist, err := f.getNodeList(service,providerInstance)
 	if err != nil {
-		f.markServiceStatusFail(service, fmt.Sprintf("Fail to update farm on provider error: %s", err.Error()))
+		f.MarkServiceStatusFail(service, fmt.Sprintf("Fail to get node list service %s in namespace %s error: %v",service.Name,service.Namespace, err))
+		return
+	}
+
+	if len(nodelist) == 0 {
+		f.DeleteFarm(service.Namespace,service.Name)
 		return
 	}
 
 	farm.Status.NodeList = nodelist
 	farmIpAddress, err := f.providerController.UpdateFarm(farm)
 	if err != nil {
-		f.markServiceStatusFail(service, fmt.Sprintf("Fail to update farm on provider error: %s", err.Error()))
+		f.MarkServiceStatusFail(service, fmt.Sprintf("Fail to update farm on provider error: %s", err.Error()))
 		return
 	}
 
 	errCreateFarm := f.Client.Update(context.Background(), farm)
 	if errCreateFarm != nil {
 		log.Log.V(2).Errorf("Fail to update farm error message: %s", errCreateFarm.Error())
-		f.markServiceStatusFail(service, fmt.Sprintf("Fail to update farm error message: %s", errCreateFarm.Error()))
+		f.MarkServiceStatusFail(service, fmt.Sprintf("Fail to update farm error message: %s", errCreateFarm.Error()))
 	}
 
 	if err != nil {
@@ -257,7 +271,7 @@ func (f *FarmController) updateFarm(farm *managerv1alpha1.Farm, service *corev1.
 
 	delete(service.Labels, managerv1alpha1.ServiceStatusLabel)
 	f.updateServiceIpAddress(service, farmIpAddress)
-	log.Log.Infof("Successfully create a farm %s for service %s on provider %s",farm.Name,service.Name,providerInstance.Name)
+	log.Log.Infof("Successfully updated the farm %s for service %s on provider %s",farm.Name,service.Name,providerInstance.Name)
 }
 
 func (f *FarmController) DeleteFarm(serviceNamespace, serviceName string) {
@@ -325,7 +339,7 @@ func (f *FarmController) FarmUpdateSuccessStatus(farm *managerv1alpha1.Farm, ipA
 func (f *FarmController) needToUpdate(farm *managerv1alpha1.Farm, service *corev1.Service) (bool, error) {
 	providerInstance, err := f.getProvider(service)
 	if err != nil {
-		f.markServiceStatusFail(service, fmt.Sprintf("Fail to get provider for service %s in namespace %s error: %v",service.Name,service.Namespace, err))
+		f.MarkServiceStatusFail(service, fmt.Sprintf("Fail to get provider for service %s in namespace %s error: %v",service.Name,service.Namespace, err))
 		return false, err
 	}
 
@@ -343,7 +357,7 @@ func (f *FarmController) needToUpdate(farm *managerv1alpha1.Farm, service *corev
 
 	nodeList, err := f.getNodeList(service,providerInstance)
 	if err != nil {
-		f.markServiceStatusFail(service, fmt.Sprintf("Fail to get node lists for service %s in namespace %s error: %v",service.Name,service.Namespace, err))
+		f.MarkServiceStatusFail(service, fmt.Sprintf("Fail to get node lists for service %s in namespace %s error: %v",service.Name,service.Namespace, err))
 		return false, err
 	}
 
@@ -375,6 +389,10 @@ func(f *FarmController) getEndPoints(service *corev1.Service) ([]string,error){
 	endpoints, err := f.kubeClient.CoreV1().Endpoints(service.Namespace).Get(service.Name,metav1.GetOptions{})
 	if err != nil {
 		return endpointsList,err
+	}
+
+	if len(endpoints.Subsets) == 0 {
+		return endpointsList, nil
 	}
 
 	for _,endpointValue :=range endpoints.Subsets[0].Addresses {

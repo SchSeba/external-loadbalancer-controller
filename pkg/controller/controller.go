@@ -21,36 +21,15 @@ import (
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/node"
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/provider"
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/service"
+	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/endpoint"
 
 	"k8s.io/client-go/kubernetes"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 
-func LoadNodes(kubeClient *kubernetes.Clientset) ([]string,map[string]string) {
-	nodes, err := kubeClient.CoreV1().Nodes().List(metav1.ListOptions{})
-	if err != nil {
-		panic(err)
-	}
 
-	nodeList := make([]string, 0)
-	nodeMap := make(map[string]string)
-	for _, nodeInstance := range nodes.Items {
-		for _, IpAddr := range nodeInstance.Status.Addresses {
-			if IpAddr.Type == "InternalIP" {
-				if value, ok := nodeMap[nodeInstance.Name]; !ok || value != IpAddr.Address {
-					nodeMap[nodeInstance.Name] = IpAddr.Address
-					nodeList = append(nodeList, IpAddr.Address)
-				}
-			}
-		}
-	}
-
-	return nodeList, nodeMap
-}
 
 // AddToManagerFuncs is a list of functions to add all Controllers to the Manager
 var AddToManagerFuncs []func(manager.Manager) error
@@ -58,9 +37,7 @@ var AddToManagerFuncs []func(manager.Manager) error
 // AddToManager adds all Controllers to the Manager
 func AddToManager(m manager.Manager, kubeClient *kubernetes.Clientset) error {
 
-	nodeList, nodeMap := LoadNodes(kubeClient)
-
-	providerController, err := provider.NewProviderController(m, kubeClient, nodeList)
+	providerController, err := provider.NewProviderController(m, kubeClient)
 	if err != nil {
 		return err
 	}
@@ -70,15 +47,19 @@ func AddToManager(m manager.Manager, kubeClient *kubernetes.Clientset) error {
 		return err
 	}
 
-	_, err = node.NewNodeController(m, kubeClient, farmController, nodeMap)
+	serviceController, err := service.NewServiceController(m, kubeClient, farmController)
 	if err != nil {
 		return err
 	}
 
-	_, err = service.NewServiceController(m, kubeClient, farmController)
+	_, err = node.NewNodeController(m, kubeClient, serviceController)
 	if err != nil {
 		return err
 	}
 
+	_, err = endpoint.NewEndPointController(m, kubeClient, serviceController)
+	if err != nil {
+		return err
+	}
 	return nil
 }
