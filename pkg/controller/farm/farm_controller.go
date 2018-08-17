@@ -151,7 +151,7 @@ func (f *FarmController) createFarm(service *corev1.Service) {
 		f.MarkServiceStatusFail(service, "Fail to find a provider for the service")
 	}
 
-	farm,err := f.createFarmObject(service, fmt.Sprintf("%s-%s", service.Namespace, service.Name), providerInstance)
+	farm, err := f.createFarmObject(service, fmt.Sprintf("%s-%s", service.Namespace, service.Name), providerInstance)
 	if err != nil {
 		f.MarkServiceStatusFail(service, fmt.Sprintf("Fail to create farm error: %v", err))
 		return
@@ -186,7 +186,7 @@ func (f *FarmController) createFarm(service *corev1.Service) {
 	}
 
 	f.updateServiceIpAddress(service, farmIpAddress)
-	log.Log.Infof("Successfully created the farm %s for service %s on provider %s",farm.Name,service.Name,providerInstance.Name)
+	log.Log.Infof("Successfully created the farm %s for service %s on provider %s", farm.Name, service.Name, providerInstance.Name)
 }
 
 func (f *FarmController) MarkServiceStatusFail(service *corev1.Service, message string) {
@@ -197,7 +197,7 @@ func (f *FarmController) MarkServiceStatusFail(service *corev1.Service, message 
 	service.Labels[managerv1alpha1.ServiceStatusLabel] = managerv1alpha1.ServiceStatusLabelFailed
 }
 
-func (f *FarmController) UpdateSuccessEventOnService(service *corev1.Service,message string) {
+func (f *FarmController) UpdateSuccessEventOnService(service *corev1.Service, message string) {
 	f.ReconcileFarm.Event.Event(service.DeepCopyObject(), "Normal", "FarmCreatedSuccess", message)
 }
 
@@ -216,7 +216,7 @@ func (f *FarmController) updateFarm(farm *managerv1alpha1.Farm, service *corev1.
 					providerInstance.Name,
 					service.Name), providerInstance)
 			if err != nil {
-				log.Log.Errorf("fail to create a new farm for a delete service object error %v",err)
+				log.Log.Errorf("fail to create a new farm for a delete service object error %v", err)
 			}
 
 			f.FarmUpdateFailDeleteStatus(deletedProviderFarm, "Warning", "FarmDeleteFail", err.Error())
@@ -233,14 +233,14 @@ func (f *FarmController) updateFarm(farm *managerv1alpha1.Farm, service *corev1.
 	}
 
 	farm.Spec.Ports = service.Spec.Ports
-	nodelist, err := f.getNodeList(service,providerInstance)
+	nodelist, err := f.getNodeList(service, providerInstance)
 	if err != nil {
-		f.MarkServiceStatusFail(service, fmt.Sprintf("Fail to get node list service %s in namespace %s error: %v",service.Name,service.Namespace, err))
+		f.MarkServiceStatusFail(service, fmt.Sprintf("Fail to get node list service %s in namespace %s error: %v", service.Name, service.Namespace, err))
 		return
 	}
 
 	if len(nodelist) == 0 {
-		f.DeleteFarm(service.Namespace,service.Name)
+		f.DeleteFarm(service.Namespace, service.Name)
 		return
 	}
 
@@ -271,7 +271,7 @@ func (f *FarmController) updateFarm(farm *managerv1alpha1.Farm, service *corev1.
 
 	delete(service.Labels, managerv1alpha1.ServiceStatusLabel)
 	f.updateServiceIpAddress(service, farmIpAddress)
-	log.Log.Infof("Successfully updated the farm %s for service %s on provider %s",farm.Name,service.Name,providerInstance.Name)
+	log.Log.Infof("Successfully updated the farm %s for service %s on provider %s", farm.Name, service.Name, providerInstance.Name)
 }
 
 func (f *FarmController) DeleteFarm(serviceNamespace, serviceName string) {
@@ -339,7 +339,7 @@ func (f *FarmController) FarmUpdateSuccessStatus(farm *managerv1alpha1.Farm, ipA
 func (f *FarmController) needToUpdate(farm *managerv1alpha1.Farm, service *corev1.Service) (bool, error) {
 	providerInstance, err := f.getProvider(service)
 	if err != nil {
-		f.MarkServiceStatusFail(service, fmt.Sprintf("Fail to get provider for service %s in namespace %s error: %v",service.Name,service.Namespace, err))
+		f.MarkServiceStatusFail(service, fmt.Sprintf("Fail to get provider for service %s in namespace %s error: %v", service.Name, service.Namespace, err))
 		return false, err
 	}
 
@@ -355,9 +355,9 @@ func (f *FarmController) needToUpdate(farm *managerv1alpha1.Farm, service *corev
 		return true, nil
 	}
 
-	nodeList, err := f.getNodeList(service,providerInstance)
+	nodeList, err := f.getNodeList(service, providerInstance)
 	if err != nil {
-		f.MarkServiceStatusFail(service, fmt.Sprintf("Fail to get node lists for service %s in namespace %s error: %v",service.Name,service.Namespace, err))
+		f.MarkServiceStatusFail(service, fmt.Sprintf("Fail to get node lists for service %s in namespace %s error: %v", service.Name, service.Namespace, err))
 		return false, err
 	}
 
@@ -384,25 +384,25 @@ func (f *FarmController) serviceExist(farmInstance *managerv1alpha1.Farm) bool {
 	return true
 }
 
-func(f *FarmController) getEndPoints(service *corev1.Service) ([]string,error){
-	endpointsList := make([]string,0)
-	endpoints, err := f.kubeClient.CoreV1().Endpoints(service.Namespace).Get(service.Name,metav1.GetOptions{})
+func (f *FarmController) getEndPoints(service *corev1.Service) ([]string, error) {
+	endpointsList := make([]string, 0)
+	endpoints, err := f.kubeClient.CoreV1().Endpoints(service.Namespace).Get(service.Name, metav1.GetOptions{})
 	if err != nil {
-		return endpointsList,err
+		return endpointsList, err
 	}
 
 	if len(endpoints.Subsets) == 0 {
 		return endpointsList, nil
 	}
 
-	for _,endpointValue :=range endpoints.Subsets[0].Addresses {
-		endpointsList= append(endpointsList,endpointValue.IP)
+	for _, endpointValue := range endpoints.Subsets[0].Addresses {
+		endpointsList = append(endpointsList, endpointValue.IP)
 	}
 
 	return endpointsList, nil
 }
 
-func (f *FarmController) getClusterNodes() ([]string,error) {
+func (f *FarmController) getClusterNodes() ([]string, error) {
 	nodeList := make([]string, 0)
 	nodes, err := f.kubeClient.CoreV1().Nodes().List(metav1.ListOptions{})
 	if err != nil {
@@ -417,7 +417,7 @@ func (f *FarmController) getClusterNodes() ([]string,error) {
 		}
 	}
 
-	return nodeList,nil
+	return nodeList, nil
 }
 
 func (f *FarmController) reSyncFailFarms() {
@@ -504,19 +504,19 @@ func (f *FarmController) getProvider(service *corev1.Service) (*managerv1alpha1.
 }
 
 func (f *FarmController) createFarmObject(service *corev1.Service, farmName string, provider *managerv1alpha1.Provider) (*managerv1alpha1.Farm, error) {
-	farmStatus, err := f.farmDefaultStatus(service,provider)
+	farmStatus, err := f.farmDefaultStatus(service, provider)
 	if err != nil {
-		return nil , err
+		return nil, err
 	}
 	return &managerv1alpha1.Farm{ObjectMeta: metav1.ObjectMeta{Name: farmName, Namespace: managerv1alpha1.ControllerNamespace},
 		Spec: managerv1alpha1.FarmSpec{ServiceName: service.Name,
 			ServiceNamespace: service.Namespace,
 			Ports:            service.Spec.Ports,
-			Provider:         provider.Name}, Status: *farmStatus },nil
+			Provider:         provider.Name}, Status: *farmStatus}, nil
 }
 
-func(f *FarmController) farmDefaultStatus(service *corev1.Service,provider *managerv1alpha1.Provider) (*managerv1alpha1.FarmStatus, error) {
-	nodelist, err := f.getNodeList(service,provider)
+func (f *FarmController) farmDefaultStatus(service *corev1.Service, provider *managerv1alpha1.Provider) (*managerv1alpha1.FarmStatus, error) {
+	nodelist, err := f.getNodeList(service, provider)
 	if err != nil {
 		return nil, err
 	}
@@ -524,7 +524,7 @@ func(f *FarmController) farmDefaultStatus(service *corev1.Service,provider *mana
 	return &managerv1alpha1.FarmStatus{NodeList: nodelist, IpAdress: "", LastUpdate: metav1.NewTime(time.Now()), ConnectionStatus: ""}, err
 }
 
-func (f *FarmController) getNodeList(service *corev1.Service,provider *managerv1alpha1.Provider) ([]string,error) {
+func (f *FarmController) getNodeList(service *corev1.Service, provider *managerv1alpha1.Provider) ([]string, error) {
 	if provider.Spec.Internal == true {
 		return f.getEndPoints(service)
 	}

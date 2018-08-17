@@ -31,8 +31,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	managerv1alpha1 "github.com/k8s-external-lb/external-loadbalancer-controller/pkg/apis/manager/v1alpha1"
-	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/log"
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/service"
+	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/log"
 
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/record"
@@ -60,10 +60,10 @@ func NewEndPointController(mgr manager.Manager, kubeClient *kubernetes.Clientset
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, kubeClient *kubernetes.Clientset, serviceController *service.ServiceController) *ReconcileEndPoint {
 	return &ReconcileEndPoint{Client: mgr.GetClient(),
-		kubeClient:     kubeClient,
+		kubeClient:        kubeClient,
 		serviceController: serviceController,
-		scheme:         mgr.GetScheme(),
-		Event:          mgr.GetRecorder(managerv1alpha1.EventRecorderName)}
+		scheme:            mgr.GetScheme(),
+		Event:             mgr.GetRecorder(managerv1alpha1.EventRecorderName)}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -88,10 +88,10 @@ var _ reconcile.Reconciler = &ReconcileEndPoint{}
 // ReconcileNode reconciles a Endpoints object
 type ReconcileEndPoint struct {
 	client.Client
-	kubeClient     *kubernetes.Clientset
-	Event          record.EventRecorder
+	kubeClient        *kubernetes.Clientset
+	Event             record.EventRecorder
 	serviceController *service.ServiceController
-	scheme         *runtime.Scheme
+	scheme            *runtime.Scheme
 }
 
 // Reconcile reads that state of the cluster for a Endpoints object and makes changes based on the state read

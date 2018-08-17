@@ -33,12 +33,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	managerv1alpha1 "github.com/k8s-external-lb/external-loadbalancer-controller/pkg/apis/manager/v1alpha1"
-	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/log"
 	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/controller/service"
+	"github.com/k8s-external-lb/external-loadbalancer-controller/pkg/log"
 
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/record"
-
 )
 
 type NodeController struct {
@@ -60,8 +59,7 @@ func NewNodeController(mgr manager.Manager, kubeClient *kubernetes.Clientset, se
 
 }
 
-
-func loadNodes(kubeClient *kubernetes.Clientset) (map[string]string) {
+func loadNodes(kubeClient *kubernetes.Clientset) map[string]string {
 	nodes, err := kubeClient.CoreV1().Nodes().List(metav1.ListOptions{})
 	if err != nil {
 		panic(err)
@@ -84,13 +82,12 @@ func loadNodes(kubeClient *kubernetes.Clientset) (map[string]string) {
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, kubeClient *kubernetes.Clientset, serviceController *service.ServiceController) *ReconcileNode {
 
-
 	return &ReconcileNode{Client: mgr.GetClient(),
-		kubeClient:     kubeClient,
+		kubeClient:        kubeClient,
 		serviceController: serviceController,
-		scheme:         mgr.GetScheme(),
-		Event:          mgr.GetRecorder(managerv1alpha1.EventRecorderName),
-		NodeMap:        loadNodes(kubeClient)}
+		scheme:            mgr.GetScheme(),
+		Event:             mgr.GetRecorder(managerv1alpha1.EventRecorderName),
+		NodeMap:           loadNodes(kubeClient)}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -115,11 +112,11 @@ var _ reconcile.Reconciler = &ReconcileNode{}
 // ReconcileNode reconciles a Node object
 type ReconcileNode struct {
 	client.Client
-	kubeClient     *kubernetes.Clientset
-	Event          record.EventRecorder
+	kubeClient        *kubernetes.Clientset
+	Event             record.EventRecorder
 	serviceController *service.ServiceController
-	scheme         *runtime.Scheme
-	NodeMap        map[string]string
+	scheme            *runtime.Scheme
+	NodeMap           map[string]string
 }
 
 // Reconcile reads that state of the cluster for a Node object and makes changes based on the state read
@@ -127,20 +124,44 @@ type ReconcileNode struct {
 // +kubebuilder:rbac:groups=core,resources=nodes,verbs=get;list;watch
 func (r *ReconcileNode) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	// Fetch the Node instance
-	instance := &corev1.Node{}
-	err := r.Get(context.TODO(), request.NamespacedName, instance)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// TODO: need to implement this
-			log.Log.Info("Remove node")
-			return reconcile.Result{}, nil
-		}
-
+	nodeInstance := &corev1.Node{}
+	err := r.Get(context.TODO(), request.NamespacedName, nodeInstance)
+	if err != nil && !errors.IsNotFound(err) {
 		log.Log.Errorf("Fail to reconcile node error message: %s", err.Error())
 
 		return reconcile.Result{}, err
 	}
 
-	// TODO:(seba) Update services on node change
+	if r.needToUpdateServices() {
+		r.serviceController.UpdateAllServices()
+	}
 	return reconcile.Result{}, nil
+}
+
+func (r *ReconcileNode) needToUpdateServices() bool {
+	nodeList, err := r.kubeClient.CoreV1().Nodes().List(metav1.ListOptions{})
+	if err != nil {
+		log.Log.Error("fail to get node list")
+	}
+
+	if len(nodeList.Items) != len(r.NodeMap) {
+		r.NodeMap = loadNodes(r.kubeClient)
+		return true
+	}
+
+	for _, nodeInstance := range nodeList.Items {
+		if value, ok := r.NodeMap[nodeInstance.Name]; !ok {
+			r.NodeMap = loadNodes(r.kubeClient)
+			return true
+		} else {
+			for _, IpAddr := range nodeInstance.Status.Addresses {
+				if IpAddr.Type == "InternalIP" && value != IpAddr.Address {
+					r.NodeMap = loadNodes(r.kubeClient)
+					return true
+				}
+			}
+		}
+	}
+
+	return false
 }

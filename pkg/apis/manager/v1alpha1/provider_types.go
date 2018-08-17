@@ -26,9 +26,9 @@ import (
 // ProviderSpec defines the desired state of Provider
 // +k8s:openapi-gen=true
 type ProviderSpec struct {
-	Url     string `json:"url"`
-	Default bool   `json:"default,omitempty"`
-	Internal bool `json:"internal,omitempty"`
+	Url      string `json:"url"`
+	Default  bool   `json:"default,omitempty"`
+	Internal bool   `json:"internal,omitempty"`
 }
 
 // ProviderStatus defines the observed state of Provider
