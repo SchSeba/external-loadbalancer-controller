@@ -11,7 +11,6 @@ kind: Provider
 metadata:
   labels:
     controller-tools.k8s.io: "1.0"
-#    external-loadbalancer-default: "true"
   name: provider-sample-internal
   namespace: external-loadbalancer
 spec:

@@ -122,36 +122,6 @@ type ReconcileNode struct {
 	NodeMap        map[string]string
 }
 
-//func (r *ReconcileNode) updateProviderNodeList() error {
-//	needToUpdate := false
-//	nodeList := make([]string, 0)
-//
-//	nodes := &corev1.NodeList{}
-//	err := r.Client.List(context.Background(), nil, nodes)
-//	if err != nil {
-//		return err
-//	}
-//
-//	for _, node := range nodes.Items {
-//		for _, IpAddr := range node.Status.Addresses {
-//			if IpAddr.Type == "InternalIP" {
-//				if value, ok := r.NodeMap[node.Name]; !ok || value != IpAddr.Address {
-//					needToUpdate = true
-//					r.NodeMap[node.Name] = IpAddr.Address
-//					nodeList = append(nodeList, IpAddr.Address)
-//				}
-//			}
-//		}
-//	}
-//
-//	err = nil
-//	if needToUpdate {
-//		r.farmController.CreateNodeList(nodeList)
-//	}
-//
-//	return err
-//}
-
 // Reconcile reads that state of the cluster for a Node object and makes changes based on the state read
 // and what is in the Node.Spec
 // +kubebuilder:rbac:groups=core,resources=nodes,verbs=get;list;watch
@@ -171,7 +141,6 @@ func (r *ReconcileNode) Reconcile(request reconcile.Request) (reconcile.Result, 
 		return reconcile.Result{}, err
 	}
 
-
-
+	// TODO:(seba) Update services on node change
 	return reconcile.Result{}, nil
 }
